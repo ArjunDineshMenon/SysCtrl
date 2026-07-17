@@ -1,197 +1,139 @@
-// Apple Silicon GPU sensor implementation for Asahi Linux and macOS.
-// Uses powermetrics on macOS and sysfs on Asahi Linux.
+// Apple Silicon GPU sensor for Asahi Linux (open-source asahi/honeykrisp DRM driver).
+// Runs on Linux only — not macOS (which uses powermetrics via a separate backend).
 
 use crate::sensors::{GpuReading, GpuSensor};
-use anyhow::{Context, Result};
+use anyhow::Result;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
-/// Apple Silicon GPU sensor.
-/// On macOS: uses `powermetrics` for GPU usage, temperature, and memory.
-/// On Asahi Linux: uses sysfs (drm/panfrost or drm/asahi) for available metrics.
+/// Apple GPU sensor using sysfs (Asahi DRM driver) + macsmc-hwmon for temperature.
+/// Each instance wraps a single DRM card device.
 pub struct AppleGpuSensor {
-    #[cfg(target_os = "macos")]
-    cached_name: String,
-    #[cfg(target_os = "linux")]
     card_path: PathBuf,
-    #[cfg(target_os = "linux")]
-    hwmon_path: Option<PathBuf>,
-    #[cfg(target_os = "linux")]
+    device_path: PathBuf,
+    hwmon_macsmc_path: Option<PathBuf>,
     cached_name: String,
 }
 
 impl AppleGpuSensor {
-    /// Probe for Apple Silicon GPU.
-    /// On macOS: always returns one sensor if on Apple Silicon (detected via sysctl).
-    /// On Linux (Asahi): scans `/sys/class/drm/card*` for panfrost/asahi driver.
+    /// Probe all Apple Silicon GPUs by scanning `/sys/class/drm/card*`.
+    /// Matches vendor ID 0x106b (Apple's PCI-ish vendor ID in Asahi stack) OR
+    /// driver symlink basename "asahi" (secondary check, since support has been
+    /// a moving target across kernel versions).
     pub fn probe() -> Vec<Self> {
-        #[cfg(target_os = "macos")]
-        {
-            // Check if we're on Apple Silicon via sysctl
-            let output = Command::new("sysctl")
-                .args(["-n", "machdep.cpu.brand_string"])
-                .output();
-            let is_apple_silicon = output
-                .map(|o| String::from_utf8_lossy(&o.stdout).contains("Apple"))
-                .unwrap_or(false);
+        let drm_path = Path::new("/sys/class/drm");
+        let mut sensors = Vec::new();
 
-            if !is_apple_silicon {
-                return vec![];
+        let entries = match fs::read_dir(drm_path) {
+            Ok(e) => e,
+            Err(_) => return sensors,
+        };
+
+        // Pre-scan for macsmc hwmon once (shared across all Apple GPUs)
+        let macsmc_hwmon = find_macsmc_hwmon();
+
+        for entry in entries.flatten() {
+            let file_name = entry.file_name();
+            let name_str = file_name.to_string_lossy();
+
+            // Only consider bare "cardN" directories, skip "cardN-*" connector entries
+            if !name_str.starts_with("card") || name_str.contains('-') {
+                continue;
             }
 
-            vec![Self {
-                cached_name: "Apple Silicon GPU".to_string(),
-            }]
-        }
+            let card_path = entry.path();
+            let device_path = card_path.join("device");
 
-        #[cfg(target_os = "linux")]
-        {
-            let drm_path = Path::new("/sys/class/drm");
-            let mut sensors = Vec::new();
+            // Check vendor ID first (0x106b = Apple in Asahi stack)
+            let is_apple = is_apple_vendor(&device_path) || is_asahi_driver(&device_path);
 
-            let entries = match fs::read_dir(drm_path) {
-                Ok(e) => e,
-                Err(_) => return sensors,
-            };
-
-            for entry in entries.flatten() {
-                let file_name = entry.file_name();
-                let name_str = file_name.to_string_lossy();
-
-                // Only consider bare "cardN" directories
-                if !name_str.starts_with("card") || name_str.contains('-') {
-                    continue;
-                }
-
-                let card_path = entry.path();
-                let device_path = card_path.join("device");
-
-                // Check if this is an Apple/Asahi GPU (vendor 0x106b for Apple, or driver name)
-                if !is_apple_gpu_device(&device_path) {
-                    continue;
-                }
-
-                // Find hwmon for temperature (may not exist on Asahi yet)
-                let hwmon_path = find_hwmon_dir(&device_path);
-
-                // Get name from uevent or fallback
-                let name = get_device_name(&device_path, &name_str);
-
-                sensors.push(Self {
-                    card_path,
-                    hwmon_path,
-                    cached_name: name,
-                });
+            if !is_apple {
+                continue;
             }
 
-            sensors
+            sensors.push(Self {
+                card_path,
+                device_path,
+                hwmon_macsmc_path: macsmc_hwmon.clone(),
+                cached_name: format!("Apple GPU ({})", name_str),
+            });
         }
 
-        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
-        {
-            vec![]
-        }
+        sensors
     }
 
-    #[cfg(target_os = "macos")]
-    fn read_via_powermetrics() -> Option<GpuReading> {
-        // powermetrics -n 1 -s gpu_power --show-process-gpu --format plist
-        // We use a simpler invocation: powermetrics -n 1 --samplers gpu_power -f plist
-        let output = Command::new("powermetrics")
-            .args(["-n", "1", "--samplers", "gpu_power", "-f", "plist"])
-            .output()
-            .ok()?;
-
-        if !output.status.success() {
-            return None;
-        }
-
-        let plist_str = String::from_utf8(output.stdout).ok()?;
-        // Parse plist - we'll use a simple string search for the keys we need
-        // since adding a plist parser crate would be overkill for this
-        let usage = extract_plist_float(&plist_str, "GPU Utilization")?;
-        let temp = extract_plist_float(&plist_str, "GPU Temperature")?;
-        let vram_used = extract_plist_int(&plist_str, "GPU Memory Used")?;
-        let vram_total = extract_plist_int(&plist_str, "GPU Memory Total")?;
-
-        Some(GpuReading {
-            name: "Apple Silicon GPU".to_string(),
-            usage_percent: Some(usage),
-            temp_celsius: Some(temp),
-            vram_used_mb: Some((vram_used / 1024 / 1024) as u32),
-            vram_total_mb: Some((vram_total / 1024 / 1024) as u32),
-        })
-    }
-
-    #[cfg(target_os = "linux")]
+    /// Read a sysfs file as a string, returning None if missing/unreadable.
     fn read_sysfs_string(path: &Path) -> Option<String> {
         fs::read_to_string(path).ok().map(|s| s.trim().to_string())
     }
 
-    #[cfg(target_os = "linux")]
+    /// Read a sysfs file as u64, returning None if missing/unreadable/invalid.
     fn read_sysfs_u64(path: &Path) -> Option<u64> {
         Self::read_sysfs_string(path)?.parse().ok()
+    }
+
+    /// Read GPU usage from device/gpu_busy_percent (amdgpu-style).
+    /// Asahi driver has added this in some kernel versions but it's not
+    /// universally available yet. Return None if absent — best-effort only.
+    fn read_usage(&self) -> Option<f32> {
+        Self::read_sysfs_u64(&self.device_path.join("gpu_busy_percent"))
+            .map(|v| v as f32)
+    }
+
+    /// Read GPU temperature from macsmc-hwmon.
+    /// Scans for a tempN_label containing "GPU" (case-insensitive), then reads
+    /// the corresponding tempN_input. Returns None if no GPU-labeled sensor found.
+    fn read_temp(&self) -> Option<f32> {
+        let macsmc = self.hwmon_macsmc_path.as_ref()?;
+
+        let entries = fs::read_dir(macsmc).ok()?;
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy();
+            if name.starts_with("temp") && name.ends_with("_label") {
+                if let Ok(label) = fs::read_to_string(entry.path()) {
+                    let label = label.trim().to_lowercase();
+                    if label.contains("gpu") {
+                        // Found GPU label — read corresponding tempN_input
+                        let input_name = name.replace("_label", "_input");
+                        let input_path = macsmc.join(input_name);
+                        if let Ok(temp_str) = fs::read_to_string(input_path) {
+                            if let Ok(temp_milli) = temp_str.trim().parse::<i64>() {
+                                return Some(temp_milli as f32 / 1000.0);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        None
     }
 }
 
 impl GpuSensor for AppleGpuSensor {
     fn read(&self) -> Result<GpuReading> {
-        #[cfg(target_os = "macos")]
-        {
-            if let Some(reading) = Self::read_via_powermetrics() {
-                return Ok(reading);
-            }
-            // Fallback if powermetrics fails
-            return Ok(GpuReading {
-                name: self.cached_name.clone(),
-                usage_percent: None,
-                temp_celsius: None,
-                vram_used_mb: None,
-                vram_total_mb: None,
-            });
+        // Usage: best-effort via gpu_busy_percent (may be absent)
+        let usage_percent = self.read_usage();
+
+        // Temperature: from macsmc-hwmon with GPU label match
+        let temp_celsius = self.read_temp();
+
+        // VRAM: Apple Silicon uses unified memory — no separate VRAM concept.
+        // The Asahi driver does not expose dedicated VRAM counters via sysfs.
+        let vram_used_mb: Option<u32> = None;
+        let vram_total_mb: Option<u32> = None;
+
+        // If the device directory itself is gone, that's a hard error (device removed/driver unloaded)
+        if !self.device_path.exists() {
+            anyhow::bail!("Apple GPU device path vanished: {:?}", self.device_path);
         }
 
-        #[cfg(target_os = "linux")]
-        {
-            let device_path = self.card_path.join("device");
-
-            // Usage: try to read from debugfs or sysfs if available (panfrost/asahi)
-            // Currently no standard sysfs busy percent for Asahi, so None
-            let usage_percent: Option<f32> = None;
-
-            // Temperature from hwmon if available
-            let temp_celsius = self.hwmon_path.as_ref().and_then(|hwmon| {
-                Self::read_sysfs_u64(&hwmon.join("temp1_input")).map(|v| v as f32 / 1000.0)
-            });
-
-            // VRAM: Apple Silicon uses unified memory, no dedicated VRAM
-            let vram_used_mb = None;
-            let vram_total_mb = None;
-
-            if !device_path.exists() {
-                anyhow::bail!("Apple GPU device path vanished: {:?}", device_path);
-            }
-
-            Ok(GpuReading {
-                name: self.cached_name.clone(),
-                usage_percent,
-                temp_celsius,
-                vram_used_mb,
-                vram_total_mb,
-            })
-        }
-
-        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
-        {
-            Ok(GpuReading {
-                name: self.cached_name.clone(),
-                usage_percent: None,
-                temp_celsius: None,
-                vram_used_mb: None,
-                vram_total_mb: None,
-            })
-        }
+        Ok(GpuReading {
+            name: self.cached_name.clone(),
+            usage_percent,
+            temp_celsius,
+            vram_used_mb,
+            vram_total_mb,
+        })
     }
 
     fn name(&self) -> &str {
@@ -199,80 +141,44 @@ impl GpuSensor for AppleGpuSensor {
     }
 }
 
-#[cfg(target_os = "macos")]
-fn extract_plist_float(plist: &str, key: &str) -> Option<f32> {
-    // Simple plist parsing for <key>Key</key><real>Value</real> or <integer>Value</integer>
-    let key_tag = format!("<key>{}</key>", key);
-    let start = plist.find(&key_tag)?;
-    let after_key = &plist[start + key_tag.len()..];
-    // Look for <real> or <integer>
-    let real_start = after_key.find("<real>")?;
-    let real_end = after_key[real_start..].find("</real>")?;
-    let value_str = &after_key[real_start + 6..real_start + real_end];
-    value_str.trim().parse().ok()
-}
-
-#[cfg(target_os = "macos")]
-fn extract_plist_int(plist: &str, key: &str) -> Option<u64> {
-    let key_tag = format!("<key>{}</key>", key);
-    let start = plist.find(&key_tag)?;
-    let after_key = &plist[start + key_tag.len()..];
-    let int_start = after_key.find("<integer>")?;
-    let int_end = after_key[int_start..].find("</integer>")?;
-    let value_str = &after_key[int_start + 9..int_start + int_end];
-    value_str.trim().parse().ok()
-}
-
-#[cfg(target_os = "linux")]
-fn is_apple_gpu_device(device_path: &Path) -> bool {
-    // Check vendor ID (Apple = 0x106b) or driver name
+/// Check if device has Apple vendor ID (0x106b) in the Asahi stack.
+fn is_apple_vendor(device_path: &Path) -> bool {
     let vendor_path = device_path.join("vendor");
-    if let Ok(vendor) = fs::read_to_string(&vendor_path) {
-        if vendor.trim() == "0x106b" {
-            return true;
-        }
+    match fs::read_to_string(&vendor_path) {
+        Ok(s) => s.trim() == "0x106b",
+        Err(_) => false,
     }
+}
 
-    // Check driver symlink for panfrost/asahi
+/// Check if device's driver symlink points to "asahi" driver.
+/// Secondary check since vendor ID support has been inconsistent across kernels.
+fn is_asahi_driver(device_path: &Path) -> bool {
     let driver_path = device_path.join("driver");
     if let Ok(target) = fs::read_link(&driver_path) {
-        let driver_name = target.file_name().and_then(|n| n.to_str()).unwrap_or("");
-        if driver_name.contains("panfrost") || driver_name.contains("asahi") {
-            return true;
+        if let Some(basename) = target.file_name() {
+            return basename.to_string_lossy() == "asahi";
         }
     }
-
     false
 }
 
-#[cfg(target_os = "linux")]
-fn find_hwmon_dir(device_path: &Path) -> Option<PathBuf> {
-    let hwmon_root = device_path.join("hwmon");
-    let entries = fs::read_dir(&hwmon_root).ok()?;
+/// Find the macsmc-hwmon directory by scanning `/sys/class/hwmon/hwmon*/name`
+/// for a name containing "macsmc". Returns the hwmon directory path if found.
+fn find_macsmc_hwmon() -> Option<PathBuf> {
+    let hwmon_root = Path::new("/sys/class/hwmon");
+    let entries = fs::read_dir(hwmon_root).ok()?;
 
     for entry in entries.flatten() {
-        let name = entry.file_name();
-        let name_str = name.to_string_lossy();
-        if name_str.starts_with("hwmon") {
-            return Some(entry.path());
+        let name_path = entry.path().join("name");
+        if let Ok(name) = fs::read_to_string(&name_path) {
+            if name.to_lowercase().contains("macsmc") {
+                return Some(entry.path());
+            }
         }
     }
     None
 }
 
-#[cfg(target_os = "linux")]
-fn get_device_name(device_path: &Path, card_name: &str) -> String {
-    // Parse uevent for PCI_ID
-    if let Some(uevent) = AppleGpuSensor::read_sysfs_string(&device_path.join("uevent")) {
-        for line in uevent.lines() {
-            if let Some(pci_id) = line.strip_prefix("PCI_ID=") {
-                return format!("Apple GPU ({})", pci_id);
-            }
-        }
-    }
-    format!("Apple GPU ({})", card_name)
-}
-
-// Send + Sync: only contains PathBuf, Option<PathBuf>, String
+// The struct only contains PathBuf, Option<PathBuf>, and String — all Send + Sync.
 unsafe impl Send for AppleGpuSensor {}
 unsafe impl Sync for AppleGpuSensor {}
