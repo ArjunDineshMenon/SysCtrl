@@ -5,9 +5,14 @@ mod gpu_intel;
 mod gpu_apple;
 mod fan;
 
+use crate::sensors::cpu::CpuSensorImpl;
+use crate::sensors::fan::HwmonFanController;
+use crate::sensors::gpu_amd::AmdGpuSensor;
+use crate::sensors::gpu_apple::AppleGpuSensor;
+use crate::sensors::gpu_intel::IntelGpuSensor;
+use crate::sensors::gpu_nvidia::NvidiaGpuSensor;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CpuReading {
@@ -61,56 +66,35 @@ pub struct DetectedBackends {
     pub fan: Box<dyn FanController>,
 }
 
-struct StubCpuSensor;
-impl CpuSensor for StubCpuSensor {
-    fn read(&self) -> Result<CpuReading> {
-        Ok(CpuReading {
-            usage_percent: 0.0,
-            temp_celsius: None,
-            freq_mhz: None,
-            core_count: 0,
-        })
-    }
-}
-
-struct StubGpuSensor {
-    name: String,
-}
-impl GpuSensor for StubGpuSensor {
-    fn read(&self) -> Result<GpuReading> {
-        Ok(GpuReading {
-            name: self.name.clone(),
-            usage_percent: None,
-            temp_celsius: None,
-            vram_used_mb: None,
-            vram_total_mb: None,
-        })
-    }
-    fn name(&self) -> &str {
-        &self.name
-    }
-}
-
-struct StubFanController;
-impl FanController for StubFanController {
-    fn read_all(&self) -> Result<Vec<FanReading>> {
-        Ok(vec![])
-    }
-    fn set_percent(&self, _fan_label: &str, _percent: u8) -> Result<()> {
-        Ok(())
-    }
-}
-
 pub fn detect_backends() -> DetectedBackends {
-    // TODO(stage-2): real detection
-    // - probe nvidia-smi for NVIDIA GPUs
-    // - probe /sys/class/drm/card* for AMD/Intel GPUs
-    // - probe hwmon paths for fans and CPU temps
-    // - use sysinfo for CPU core count / usage
-    // - use powermetrics on macOS for Apple Silicon GPU
-    DetectedBackends {
-        cpu: Box::new(StubCpuSensor),
-        gpus: vec![],
-        fan: Box::new(StubFanController),
+    // Probe all GPU backends
+    let mut gpus: Vec<Box<dyn GpuSensor>> = Vec::new();
+
+    // NVIDIA (NVML)
+    for s in NvidiaGpuSensor::probe() {
+        gpus.push(Box::new(s));
     }
+
+    // AMD (amdgpu sysfs)
+    for s in AmdGpuSensor::probe() {
+        gpus.push(Box::new(s));
+    }
+
+    // Intel (i915/Xe sysfs + intel_gpu_top)
+    for s in IntelGpuSensor::probe() {
+        gpus.push(Box::new(s));
+    }
+
+    // Apple Silicon (powermetrics on macOS, sysfs on Asahi Linux)
+    for s in AppleGpuSensor::probe() {
+        gpus.push(Box::new(s));
+    }
+
+    // CPU sensor (sysinfo)
+    let cpu = Box::new(CpuSensorImpl::new()) as Box<dyn CpuSensor>;
+
+    // Fan controller (hwmon sysfs)
+    let fan = Box::new(HwmonFanController::probe()) as Box<dyn FanController>;
+
+    DetectedBackends { cpu, gpus, fan }
 }

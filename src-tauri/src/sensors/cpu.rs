@@ -205,3 +205,6 @@ impl Default for LinuxCpuSensor {
         Self::new()
     }
 }
+
+/// Type alias for the public API expected by detect_backends()
+pub type CpuSensorImpl = LinuxCpuSensor;

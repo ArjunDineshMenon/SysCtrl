@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 /// Each instance wraps a single DRM card device and its associated hwmon directory.
 pub struct AmdGpuSensor {
     card_path: PathBuf,
+    device_path: PathBuf,
     hwmon_path: Option<PathBuf>,
     cached_name: String,
 }
@@ -51,6 +52,7 @@ impl AmdGpuSensor {
 
             sensors.push(Self {
                 card_path,
+                device_path,
                 hwmon_path,
                 cached_name: name,
             });
@@ -68,35 +70,28 @@ impl AmdGpuSensor {
     fn read_sysfs_u64(path: &Path) -> Option<u64> {
         Self::read_sysfs_string(path)?.parse().ok()
     }
-
-    /// Read a sysfs file as u32, returning None if missing/unreadable/invalid.
-    fn read_sysfs_u32(path: &Path) -> Option<u32> {
-        Self::read_sysfs_u64(path).map(|v| v as u32)
-    }
 }
 
 impl GpuSensor for AmdGpuSensor {
     fn read(&self) -> Result<GpuReading> {
-        let device_path = self.card_path.join("device");
-
-        // GPU usage percentage (0-100) from gpu_busy_percent
-        let usage_percent = Self::read_sysfs_u32(&device_path.join("gpu_busy_percent"))
+        // Usage: read device/gpu_busy_percent (integer 0-100)
+        let usage_percent = Self::read_sysfs_u64(&self.device_path.join("gpu_busy_percent"))
             .map(|v| v as f32);
 
-        // Temperature from hwmon (millidegrees Celsius -> degrees Celsius)
+        // Temperature: read hwmon/temp1_input (millidegrees Celsius)
         let temp_celsius = self.hwmon_path.as_ref().and_then(|hwmon| {
             Self::read_sysfs_u64(&hwmon.join("temp1_input")).map(|v| v as f32 / 1000.0)
         });
 
-        // VRAM usage (bytes -> MB)
-        let vram_used_mb = Self::read_sysfs_u64(&device_path.join("mem_info_vram_used"))
+        // VRAM: read device/mem_info_vram_used and device/mem_info_vram_total (bytes -> MB)
+        let vram_used_mb = Self::read_sysfs_u64(&self.device_path.join("mem_info_vram_used"))
             .map(|v| (v / 1024 / 1024) as u32);
-        let vram_total_mb = Self::read_sysfs_u64(&device_path.join("mem_info_vram_total"))
+        let vram_total_mb = Self::read_sysfs_u64(&self.device_path.join("mem_info_vram_total"))
             .map(|v| (v / 1024 / 1024) as u32);
 
-        // If the device directory itself is gone, that's a hard error (device unplugged/driver unloaded)
-        if !device_path.exists() {
-            anyhow::bail!("AMD GPU device path vanished: {:?}", device_path);
+        // If the device directory itself is gone, that's a hard error (device removed/driver unloaded)
+        if !self.device_path.exists() {
+            anyhow::bail!("AMD GPU device path vanished: {:?}", self.device_path);
         }
 
         Ok(GpuReading {
@@ -139,16 +134,16 @@ fn find_hwmon_dir(device_path: &Path) -> Option<PathBuf> {
 }
 
 /// Get a human-readable device name.
-/// Priority: product_name file -> parse uevent for PCI_ID -> fallback "AMD GPU (cardN)"
+/// Priority: device/product_name -> parse device/uevent for PCI_ID -> fallback "AMD GPU (cardN)"
 fn get_device_name(device_path: &Path, card_name: &str) -> String {
-    // 1. Try product_name (available on newer kernels / some devices)
-    if let Some(name) = AmdGpuSensor::read_sysfs_string(&device_path.join("product_name")) {
-        if !name.is_empty() {
-            return name;
+    // Try product_name first (available on some newer kernels)
+    if let Some(product_name) = AmdGpuSensor::read_sysfs_string(&device_path.join("product_name")) {
+        if !product_name.is_empty() {
+            return product_name;
         }
     }
 
-    // 2. Parse uevent for PCI_ID (format: PCI_ID=1002:XXXX)
+    // Parse uevent for PCI_ID (format: PCI_ID=1002:XXXX)
     if let Some(uevent) = AmdGpuSensor::read_sysfs_string(&device_path.join("uevent")) {
         for line in uevent.lines() {
             if let Some(pci_id) = line.strip_prefix("PCI_ID=") {
@@ -158,11 +153,10 @@ fn get_device_name(device_path: &Path, card_name: &str) -> String {
         }
     }
 
-    // 3. Fallback
+    // Fallback
     format!("AMD GPU ({})", card_name)
 }
 
-// NVML is not used here; this is pure sysfs. The struct is Send + Sync because
-// it only contains PathBuf and String (both Send + Sync).
+// The struct only contains PathBuf, Option<PathBuf>, and String — all Send + Sync.
 unsafe impl Send for AmdGpuSensor {}
 unsafe impl Sync for AmdGpuSensor {}

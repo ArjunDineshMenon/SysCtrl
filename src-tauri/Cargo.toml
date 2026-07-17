@@ -10,6 +10,6 @@ serde_json = "1"
 tokio = { version = "1", features = ["rt-multi-thread", "time"] }
 anyhow = "1"
 nvml-wrapper = "0.10"
+sysinfo = "0.35"
 
 # Sensor-specific crates (add later):
-# sysinfo = "0.35"
