@@ -117,9 +117,12 @@ pub fn start_polling_loop(app: &AppHandle) {
             interval.tick().await;
 
             // Grab the lock, collect the snapshot, and release immediately.
+            // unwrap_or_else recovers from a poisoned mutex (caused by a
+            // panic in another thread while holding the lock). The inner
+            // data is still usable — we just keep going.
             let snapshot = {
                 let state = handle.state::<AppState>();
-                let guard = state.backends.lock().unwrap();
+                let guard = state.backends.lock().unwrap_or_else(|e| e.into_inner());
                 collect_snapshot(&guard)
             };
 

@@ -34,7 +34,12 @@ impl LinuxCpuSensor {
         for entry in entries.flatten() {
             let path = entry.path();
             let name_path = path.join("name");
-            let name = fs::read_to_string(&name_path).ok()?.trim().to_lowercase();
+            // Some hwmon entries lack a "name" file — skip them instead of
+            // aborting the entire scan (was `ok()?` which returned None).
+            let name = match fs::read_to_string(&name_path) {
+                Ok(s) => s.trim().to_lowercase(),
+                Err(_) => continue,
+            };
 
             let priority = match name.as_str() {
                 "k10temp" => 0,      // AMD Ryzen (Zen) - highest priority
@@ -65,8 +70,15 @@ impl LinuxCpuSensor {
                 let label_path = hwmon_dir.join(format!("temp{}_label", num));
 
                 let label = fs::read_to_string(&label_path).ok().map(|s| s.trim().to_string());
-                let temp_millidegrees: i64 = fs::read_to_string(&input_path).ok()?.trim().parse().ok()?;
-                let temp_celsius = temp_millidegrees as f32 / 1000.0;
+                // If this particular temp input is unreadable or unparseable,
+                // skip it rather than aborting the whole function.
+                let temp_celsius = match fs::read_to_string(&input_path) {
+                    Ok(s) => match s.trim().parse::<i64>() {
+                        Ok(milli) => milli as f32 / 1000.0,
+                        Err(_) => continue,
+                    },
+                    Err(_) => continue,
+                };
 
                 temp_inputs.push((label, temp_celsius));
             }
@@ -76,8 +88,12 @@ impl LinuxCpuSensor {
             return None;
         }
 
-        // For coretemp, prefer "Package id 0" label
-        let hwmon_name = fs::read_to_string(hwmon_dir.join("name")).ok()?.trim().to_lowercase();
+        // For coretemp, prefer "Package id 0" label.
+        // If the name file is unreadable at this point, just skip the
+        // coretemp preference logic and fall through to the first temp.
+        let hwmon_name = fs::read_to_string(hwmon_dir.join("name"))
+            .map(|s| s.trim().to_lowercase())
+            .unwrap_or_default();
         if hwmon_name == "coretemp" {
             for (label, temp) in &temp_inputs {
                 if label.as_deref() == Some("Package id 0") {

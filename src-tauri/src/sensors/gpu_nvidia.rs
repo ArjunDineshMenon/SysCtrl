@@ -5,12 +5,11 @@ use crate::sensors::{GpuReading, GpuSensor};
 use anyhow::{Context, Result};
 use nvml_wrapper::Nvml;
 use nvml_wrapper::enum_wrappers::device::TemperatureSensor;
-use std::sync::OnceLock;
 
 /// NVIDIA GPU sensor using NVML (NVIDIA Management Library).
 /// Each instance wraps a single GPU device and caches its name at probe time.
 pub struct NvidiaGpuSensor {
-    nvml: Nvml,
+    nvml: std::sync::Arc<Nvml>,
     device_index: u32,
     cached_name: String,
 }
@@ -19,9 +18,8 @@ impl NvidiaGpuSensor {
     /// Probe all available NVIDIA GPUs and return a sensor for each.
     /// Returns empty Vec if NVML initialization fails (e.g., no NVIDIA driver).
     pub fn probe() -> Vec<Self> {
-        // Initialize NVML once. If it fails (no driver, no GPU, etc.), return empty vec.
         let nvml = match Nvml::init() {
-            Ok(n) => n,
+            Ok(n) => std::sync::Arc::new(n),
             Err(_) => return vec![],
         };
 
@@ -55,29 +53,35 @@ impl NvidiaGpuSensor {
 
 impl GpuSensor for NvidiaGpuSensor {
     fn read(&self) -> Result<GpuReading> {
+        // Only the device handle lookup itself is treated as a hard failure —
+        // if the device vanished entirely (unplugged, driver unload), the
+        // whole read legitimately fails. Everything after this degrades
+        // field-by-field instead of failing the whole struct.
         let device = self
             .nvml
             .device_by_index(self.device_index)
             .context("failed to get device by index")?;
 
-        // GPU utilization (percentage)
-        let utilization = device
+        // GPU utilization (percentage) — degrade to None on failure.
+        let usage_percent = device
             .utilization_rates()
-            .context("failed to read utilization rates")?;
-        let usage_percent = Some(utilization.gpu as f32);
+            .ok()
+            .map(|u| u.gpu as f32);
 
-        // GPU temperature (Celsius)
+        // GPU temperature (Celsius) — degrade to None on failure.
         let temp_celsius = device
             .temperature(TemperatureSensor::Gpu)
             .ok()
             .map(|t| t as f32);
 
-        // VRAM info (bytes -> MB)
-        let mem_info = device
-            .memory_info()
-            .context("failed to read memory info")?;
-        let vram_used_mb = Some((mem_info.used / 1024 / 1024) as u32);
-        let vram_total_mb = Some((mem_info.total / 1024 / 1024) as u32);
+        // VRAM info (bytes -> MB) — degrade to None on failure.
+        let (vram_used_mb, vram_total_mb) = match device.memory_info() {
+            Ok(mem_info) => (
+                Some((mem_info.used / 1024 / 1024) as u32),
+                Some((mem_info.total / 1024 / 1024) as u32),
+            ),
+            Err(_) => (None, None),
+        };
 
         Ok(GpuReading {
             name: self.cached_name.clone(),
@@ -92,8 +96,3 @@ impl GpuSensor for NvidiaGpuSensor {
         &self.cached_name
     }
 }
-
-// NVML is thread-safe and can be cloned cheaply (Arc internally).
-// We implement Send + Sync explicitly for clarity.
-unsafe impl Send for NvidiaGpuSensor {}
-unsafe impl Sync for NvidiaGpuSensor {}
