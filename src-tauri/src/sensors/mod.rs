@@ -6,7 +6,7 @@ mod gpu_apple;
 mod fan;
 
 use crate::sensors::cpu::CpuSensorImpl;
-use crate::sensors::fan::HwmonFanController;
+use crate::sensors::fan::SysfsFanController;
 use crate::sensors::gpu_amd::AmdGpuSensor;
 use crate::sensors::gpu_apple::AppleGpuSensor;
 use crate::sensors::gpu_intel::IntelGpuSensor;
@@ -94,7 +94,7 @@ pub fn detect_backends() -> DetectedBackends {
     let cpu = Box::new(CpuSensorImpl::new()) as Box<dyn CpuSensor>;
 
     // Fan controller (hwmon sysfs)
-    let fan = Box::new(HwmonFanController::probe()) as Box<dyn FanController>;
+    let fan = Box::new(SysfsFanController::probe()) as Box<dyn FanController>;
 
     DetectedBackends { cpu, gpus, fan }
 }

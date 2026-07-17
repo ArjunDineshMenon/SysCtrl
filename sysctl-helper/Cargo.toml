@@ -1,0 +1,8 @@
+[package]
+name = "sysctl-helper"
+version = "0.1.0"
+edition = "2021"
+description = "Privileged helper for SysCtrl — writes to hwmon sysfs on behalf of the unprivileged GUI."
+
+# No runtime dependencies.  Path validation is done with manual checks
+# to keep the binary as small and auditable as possible.
