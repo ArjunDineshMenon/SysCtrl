@@ -67,33 +67,36 @@ pub struct DetectedBackends {
 }
 
 pub fn detect_backends() -> DetectedBackends {
-    // Probe all GPU backends
+    // ── GPU probing ──────────────────────────────────────────────────────
+    // Each backend's probe() returns Vec<Self>; a machine can have multiple
+    // GPUs across vendors (e.g. Intel iGPU + NVIDIA dGPU), so we chain
+    // everything into one flat list.
     let mut gpus: Vec<Box<dyn GpuSensor>> = Vec::new();
 
-    // NVIDIA (NVML)
     for s in NvidiaGpuSensor::probe() {
         gpus.push(Box::new(s));
     }
-
-    // AMD (amdgpu sysfs)
     for s in AmdGpuSensor::probe() {
         gpus.push(Box::new(s));
     }
-
-    // Intel (i915/Xe sysfs + intel_gpu_top)
     for s in IntelGpuSensor::probe() {
         gpus.push(Box::new(s));
     }
-
-    // Apple Silicon (powermetrics on macOS, sysfs on Asahi Linux)
     for s in AppleGpuSensor::probe() {
         gpus.push(Box::new(s));
     }
 
-    // CPU sensor (sysinfo)
+    // Startup sanity-check log (goes to stderr so it's visible in the
+    // terminal when running `cargo tauri dev` but never reaches the UI).
+    eprintln!("[SysCtrl] detected {} GPU(s):", gpus.len());
+    for (i, gpu) in gpus.iter().enumerate() {
+        eprintln!("[SysCtrl]   GPU {}: {}", i, gpu.name());
+    }
+
+    // ── CPU probing ──────────────────────────────────────────────────────
     let cpu = Box::new(CpuSensorImpl::new()) as Box<dyn CpuSensor>;
 
-    // Fan controller (hwmon sysfs)
+    // ── Fan probing ──────────────────────────────────────────────────────
     let fan = Box::new(SysfsFanController::probe()) as Box<dyn FanController>;
 
     DetectedBackends { cpu, gpus, fan }

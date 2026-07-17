@@ -1,96 +1,132 @@
-use tauri::{AppHandle, Emitter, Manager, Runtime};
-use crate::sensors::{detect_backends, SensorBackend, SystemSnapshot, FanInfo};
-use std::sync::{Arc, Mutex};
+// IPC command handlers for the Tauri frontend.
+//
+// Two commands are exposed:
+//   • `get_snapshot`  — on-demand poll of CPU / GPU / fan state.
+//   • `set_fan_speed` — delegate a fan duty-cycle write to the helper binary.
+//
+// A background polling loop (`start_polling_loop`) continuously pushes
+// `SystemSnapshot` events to the frontend at 1 Hz, so the UI can simply
+// listen for the "sysctrl://snapshot" event rather than polling.
+
+use crate::sensors::{self, CpuReading, FanReading, GpuReading, SystemSnapshot};
+use std::sync::Mutex;
 use std::time::Duration;
-use tokio::time::interval;
+use tauri::{AppHandle, Emitter, Manager};
 
-#[tauri::command]
-fn get_snapshot(state: tauri::State<Arc<Mutex<SensorState>>>) -> Result<SystemSnapshot, String> {
-    let state = state.lock().map_err(|e| e.to_string())?;
-    Ok(state.last_snapshot.clone())
+// ---------------------------------------------------------------------------
+// Shared application state
+// ---------------------------------------------------------------------------
+
+/// Holds the detected sensor backends behind a `std::sync::Mutex`.
+///
+/// WHY `std::sync::Mutex` instead of `tokio::sync::Mutex`?
+///
+/// All sensor reads are fast blocking syscalls on sysfs files (a couple of
+/// microseconds each).  `std::sync::Mutex` is cheaper than the async variant
+/// when the critical section is short and never awaits — it avoids the overhead
+/// of wrapping every access in an async block.
+///
+/// If a backend ever becomes genuinely async (e.g. an NVML call that talks to
+/// a daemon), swap this for `tokio::sync::Mutex` so the runtime thread isn't
+/// blocked.
+pub struct AppState {
+    pub backends: Mutex<sensors::DetectedBackends>,
 }
 
-#[tauri::command]
-fn set_fan_pwm(state: tauri::State<Arc<Mutex<SensorState>>>, fan_index: usize, pwm: u8) -> Result<(), String> {
-    let mut state = state.lock().map_err(|e| e.to_string())?;
-    state.set_fan_pwm(fan_index, pwm)
-}
+// ---------------------------------------------------------------------------
+// Snapshot helper (used by both the command and the push loop)
+// ---------------------------------------------------------------------------
 
-#[tauri::command]
-fn get_fans(state: tauri::State<Arc<Mutex<SensorState>>>) -> Result<Vec<FanInfo>, String> {
-    let state = state.lock().map_err(|e| e.to_string())?;
-    Ok(state.last_snapshot.fans.clone())
-}
-
-struct SensorState {
-    backends: Vec<Box<dyn SensorBackend>>,
-    last_snapshot: SystemSnapshot,
-}
-
-impl SensorState {
-    fn new() -> Self {
-        let backends = detect_backends();
-        Self {
-            backends,
-            last_snapshot: SystemSnapshot {
-                cpu: crate::sensors::CpuSample { usage_percent: 0.0, temp_celsius: None, freq_mhz: None },
-                gpus: Vec::new(),
-                fans: Vec::new(),
-                timestamp_ms: 0,
-            },
-        }
-    }
-
-    fn set_fan_pwm(&mut self, fan_index: usize, pwm: u8) -> Result<(), String> {
-        if let Some(backend) = self.backends.get_mut(fan_index) {
-            backend.set_fan_pwm(fan_index, pwm)
-        } else {
-            Err("Invalid fan index".into())
-        }
-    }
-
-    fn poll(&mut self) {
-        let mut cpu = None;
-        let mut gpus = Vec::new();
-        let mut fans = Vec::new();
-
-        for backend in &mut self.backends {
-            if cpu.is_none() {
-                cpu = backend.sample_cpu();
-            }
-            gpus.extend(backend.sample_gpus());
-            fans.extend(backend.sample_fans());
-        }
-
-        self.last_snapshot = SystemSnapshot {
-            cpu: cpu.unwrap_or(crate::sensors::CpuSample { usage_percent: 0.0, temp_celsius: None, freq_mhz: None }),
-            gpus,
-            fans,
-            timestamp_ms: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as u64,
-        };
-    }
-}
-
-pub fn start_polling_loop<R: Runtime>(app: AppHandle<R>) {
-    let state = app.state::<Arc<Mutex<SensorState>>>();
-    let app_handle = app.clone();
-
-    tokio::spawn(async move {
-        let mut interval = interval(Duration::from_millis(1000));
-        loop {
-            interval.tick().await;
-            let mut state_guard = state.lock().unwrap();
-            state_guard.poll();
-            let snapshot = state_guard.last_snapshot.clone();
-            drop(state_guard);
-            let _ = app_handle.emit("sysctrl://snapshot", snapshot);
+/// Read all backends and assemble a `SystemSnapshot`.
+///
+/// Errors from individual backends are logged but swallowed — a dead GPU
+/// sensor shouldn't prevent the rest of the snapshot from being delivered.
+fn collect_snapshot(backends: &sensors::DetectedBackends) -> SystemSnapshot {
+    // CPU
+    let cpu = backends.cpu.read().unwrap_or_else(|e| {
+        eprintln!("[SysCtrl] CPU read error: {:#}", e);
+        CpuReading {
+            usage_percent: 0.0,
+            temp_celsius: None,
+            freq_mhz: None,
+            core_count: 0,
         }
     });
+
+    // GPUs
+    let mut gpus = Vec::with_capacity(backends.gpus.len());
+    for gpu in &backends.gpus {
+        match gpu.read() {
+            Ok(reading) => gpus.push(reading),
+            Err(e) => eprintln!("[SysCtrl] GPU '{}' read error: {:#}", gpu.name(), e),
+        }
+    }
+
+    // Fans
+    let fans = backends.fan.read_all().unwrap_or_else(|e| {
+        eprintln!("[SysCtrl] fan read error: {:#}", e);
+        Vec::new()
+    });
+
+    SystemSnapshot { cpu, gpus, fans }
 }
 
-pub fn init<R: Runtime>(app: &mut tauri::App<R>) -> Result<(), Box<dyn std::error::Error>> {
-    let state = Arc::new(Mutex::new(SensorState::new()));
-    app.manage(state.clone());
-    start_polling_loop(app.app_handle().clone());
-    Ok(())
+// ---------------------------------------------------------------------------
+// Tauri commands
+// ---------------------------------------------------------------------------
+
+/// Return a fresh system snapshot to the frontend on demand.
+#[tauri::command]
+pub async fn get_snapshot(state: tauri::State<'_, AppState>) -> Result<SystemSnapshot, String> {
+    let guard = state.backends.lock().map_err(|e| e.to_string())?;
+    Ok(collect_snapshot(&guard))
+}
+
+/// Set a fan's duty cycle (0-100 %) via the privileged helper binary.
+///
+/// `label` must match one of the labels returned in `FanReading`; `percent`
+/// is clamped to 0-100 by the backend.
+#[tauri::command]
+pub async fn set_fan_speed(
+    state: tauri::State<'_, AppState>,
+    label: String,
+    percent: u8,
+) -> Result<(), String> {
+    let guard = state.backends.lock().map_err(|e| e.to_string())?;
+    guard
+        .fan
+        .set_percent(&label, percent)
+        .map_err(|e| format!("{:#}", e))
+}
+
+// ---------------------------------------------------------------------------
+// Background push loop
+// ---------------------------------------------------------------------------
+
+/// Spawn a tokio task that emits a `SystemSnapshot` every second.
+///
+/// The frontend can listen for the `"sysctrl://snapshot"` event to receive
+/// live updates without polling.
+pub fn start_polling_loop(app: &AppHandle) {
+    let handle = app.clone();
+
+    tauri::async_runtime::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(1));
+
+        loop {
+            interval.tick().await;
+
+            // Grab the lock, collect the snapshot, and release immediately.
+            let snapshot = {
+                let state = handle.state::<AppState>();
+                let guard = state.backends.lock().unwrap();
+                collect_snapshot(&guard)
+            };
+
+            // Emit to all webview windows.
+            if let Err(e) = handle.emit("sysctrl://snapshot", &snapshot) {
+                eprintln!("[SysCtrl] failed to emit snapshot: {}", e);
+            }
+        }
+    });
 }
