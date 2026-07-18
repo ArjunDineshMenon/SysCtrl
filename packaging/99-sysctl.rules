@@ -1,0 +1,11 @@
+# udev rules for sysctl-helper fan control
+# Allows polkit-authorized sysctl-helper binary to write PWM controls
+
+# hwmon PWM enable files (control mode: 0=off, 1=manual, 2=auto)
+SUBSYSTEM=="hwmon", KERNEL=="pwm[0-9]*_enable", TAG+="uaccess", OWNER="root", MODE="0660"
+
+# hwmon PWM duty cycle files (0-255 or 0-max_pwm)
+SUBSYSTEM=="hwmon", KERNEL=="pwm[0-9]*", TAG+="uaccess", OWNER="root", MODE="0660"
+
+# Also match by device path for sysfs symlinks under /sys/class/hwmon/hwmon*/device/
+SUBSYSTEM=="hwmon", KERNEL=="device", ATTR{pwm1_enable}=="*", TAG+="uaccess", OWNER="root", MODE="0660"
