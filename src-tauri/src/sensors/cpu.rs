@@ -211,6 +211,8 @@ impl CpuSensor for LinuxCpuSensor {
             .map(|n| n.get() as u32)
             .unwrap_or(1);
 
+        eprintln!("[DEBUG cpu] usage_percent={:.2} temp_celsius={:?} freq_mhz={:?}", usage_percent, temp_celsius, freq_mhz);
+
         Ok(CpuReading {
             usage_percent,
             temp_celsius,

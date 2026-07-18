@@ -4,7 +4,7 @@
 #[cfg(target_os = "linux")]
 use crate::sensors::{GpuReading, GpuSensor};
 #[cfg(target_os = "linux")]
-use anyhow::{Context, Result};
+use anyhow::Result;
 #[cfg(target_os = "linux")]
 use serde::Deserialize;
 #[cfg(target_os = "linux")]
@@ -79,25 +79,23 @@ impl IntelGpuSensor {
     /// Read GPU usage via intel_gpu_top JSON output.
     /// Returns None if intel_gpu_top is not available, permission denied, or parsing fails.
     fn read_usage_via_intel_gpu_top() -> Option<f32> {
-        let output = Command::new("intel_gpu_top")
-            .args(["-J", "-s", "1000", "-o", "-"])
-            .output()
-            .ok()?;
+    let output = Command::new("intel_gpu_top")
+        .args(["-J", "-s", "1000", "-o", "-"])
+        .output()
+        .ok()?;
 
-        if !output.status.success() {
-            // Permission denied (CAP_PERFMON) or other error — treat as unavailable
-            return None;
-        }
+    if !output.status.success() {
+        return None;
+    }
 
-        let stdout = String::from_utf8(output.stdout).ok()?;
-        let parsed: IntelGpuTopOutput = serde_json::from_str(&stdout).ok()?;
+    let stdout = String::from_utf8(output.stdout).ok()?;
+    let parsed: IntelGpuTopOutput = serde_json::from_str(&stdout).ok()?;
 
-        // intel_gpu_top JSON structure has engines array, find render/3D engine
-        // The "busy" field is a percentage (0-100)
-        parsed.engines.into_iter()
-            .find(|e| e.class == "render" || e.class == "3d" || e.name.to_lowercase().contains("render"))
-            .map(|e| e.busy as f32)
-            .or_else(|| parsed.engines.first().map(|e| e.busy as f32))
+    // Look for the render/3D engine first, fall back to first engine found
+    parsed.engines.iter()
+        .find(|e| e.class == "Render/3D" || e.name.contains("Render"))
+        .map(|e| e.busy as f32)
+        .or_else(|| parsed.engines.first().map(|e| e.busy as f32))
     }
 }
 

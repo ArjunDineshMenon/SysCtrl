@@ -2,9 +2,10 @@
 // Supports discrete AMD GPUs and Ryzen APU integrated graphics.
 
 use crate::sensors::{GpuReading, GpuSensor};
-use anyhow::{Context, Result};
+use anyhow::Result;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 #[cfg(target_os = "linux")]
 /// AMD GPU sensor using sysfs (amdgpu driver).
@@ -68,28 +69,51 @@ impl AmdGpuSensor {
         fs::read_to_string(path).ok().map(|s| s.trim().to_string())
     }
 
-    /// Read a sysfs file as u64, returning None if missing/unreadable/invalid.
-    fn read_sysfs_u64(path: &Path) -> Option<u64> {
-        Self::read_sysfs_string(path)?.parse().ok()
+    /// Read GPU usage via radeontop.
+    /// Returns None if radeontop is not available or parsing fails.
+    fn read_gpu_usage_radeontop() -> Option<f32> {
+        let output = Command::new("radeontop")
+            .args(["-d", "-", "-l", "1"])
+            .output()
+            .ok()?;
+        if !output.status.success() {
+            return None;
+        }
+        let stdout = String::from_utf8(output.stdout).ok()?;
+        // Parse "gpu X.XX%" from the output line
+        for part in stdout.split(',') {
+            let part = part.trim();
+            if part.starts_with("gpu ") {
+                let pct_str = part
+                    .strip_prefix("gpu ")?
+                    .strip_suffix('%')?
+                    .trim();
+                return pct_str.parse::<f32>().ok();
+            }
+        }
+        None
     }
 }
 
 #[cfg(target_os = "linux")]
 impl GpuSensor for AmdGpuSensor {
     fn read(&self) -> Result<GpuReading> {
-        // Usage: read device/gpu_busy_percent (integer 0-100)
-        let usage_percent = Self::read_sysfs_u64(&self.device_path.join("gpu_busy_percent"))
-            .map(|v| v as f32);
+        // Usage: read via radeontop (gpu_busy_percent is unreliable on some GPUs)
+        let usage_percent = Self::read_gpu_usage_radeontop();
 
         // Temperature: read hwmon/temp1_input (millidegrees Celsius)
         let temp_celsius = self.hwmon_path.as_ref().and_then(|hwmon| {
-            Self::read_sysfs_u64(&hwmon.join("temp1_input")).map(|v| v as f32 / 1000.0)
+            Self::read_sysfs_string(&hwmon.join("temp1_input"))
+                .and_then(|s| s.parse::<u64>().ok())
+                .map(|v| v as f32 / 1000.0)
         });
 
         // VRAM: read device/mem_info_vram_used and device/mem_info_vram_total (bytes -> MB)
-        let vram_used_mb = Self::read_sysfs_u64(&self.device_path.join("mem_info_vram_used"))
+        let vram_used_mb = Self::read_sysfs_string(&self.device_path.join("mem_info_vram_used"))
+            .and_then(|s| s.parse::<u64>().ok())
             .map(|v| (v / 1024 / 1024) as u32);
-        let vram_total_mb = Self::read_sysfs_u64(&self.device_path.join("mem_info_vram_total"))
+        let vram_total_mb = Self::read_sysfs_string(&self.device_path.join("mem_info_vram_total"))
+            .and_then(|s| s.parse::<u64>().ok())
             .map(|v| (v / 1024 / 1024) as u32);
 
         // If the device directory itself is gone, that's a hard error (device removed/driver unloaded)

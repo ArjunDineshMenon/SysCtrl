@@ -119,7 +119,7 @@ pub fn detect_backends() -> DetectedBackends {
     // Each backend's probe() returns Vec<Self>; a machine can have multiple
     // GPUs across vendors (e.g. Intel iGPU + NVIDIA dGPU), so we chain
     // everything into one flat list.
-    let gpus: Vec<Box<dyn GpuSensor>> = Vec::new();
+    let mut gpus: Vec<Box<dyn GpuSensor>> = Vec::new();
 
     #[cfg(target_os = "linux")]
     {

@@ -94,7 +94,7 @@ impl AppleGpuSensor {
 
         let entries = fs::read_dir(macsmc).ok()?;
         for entry in entries.flatten() {
-            let name = entry.file_name().to_string_lossy();
+            let name = entry.file_name().to_string_lossy().to_string();
             if name.starts_with("temp") && name.ends_with("_label") {
                 if let Ok(label) = fs::read_to_string(entry.path()) {
                     let label = label.trim().to_lowercase();

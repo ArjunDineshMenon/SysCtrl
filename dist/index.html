@@ -212,13 +212,6 @@
       'use strict';
 
       // -----------------------------------------------------------------------
-      // Tauri v2 bridge — invoke & event.listen are under window.__TAURI__
-      // -----------------------------------------------------------------------
-      const tauri = window.__TAURI__;
-      const invoke = tauri ? tauri.core.invoke : null;
-      const tauriListen = tauri ? tauri.event.listen : null;
-
-      // -----------------------------------------------------------------------
       // Helpers
       // -----------------------------------------------------------------------
 
@@ -246,6 +239,19 @@
           clearTimeout(timer);
           timer = setTimeout(() => fn.apply(this, args), wait);
         };
+      }
+
+      /** Wait for Tauri bridge to be injected, then call callback with the
+       *  `window.__TAURI__` object. Polls every 100 ms for up to 2 seconds. */
+      function waitForTauri(cb, attempts) {
+        attempts = attempts === undefined ? 20 : attempts;
+        if (window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.event) {
+          cb(window.__TAURI__);
+        } else if (attempts > 0) {
+          setTimeout(function() { waitForTauri(cb, attempts - 1); }, 100);
+        } else {
+          console.warn('[SysCtrl] Tauri bridge not available after 2s — static preview mode.');
+        }
       }
 
       // -----------------------------------------------------------------------
@@ -459,44 +465,43 @@
       // -----------------------------------------------------------------------
       // Boot: initial snapshot + live event listener
       // -----------------------------------------------------------------------
-      async function boot() {
-        if (!invoke || !tauriListen) {
-          // Not running inside Tauri (e.g. opened in browser for design preview).
-          console.warn('[SysCtrl] window.__TAURI__ not available — running in static preview mode.');
-          setConnected(false);
-          return;
-        }
+      function boot(tauri) {
+        var invoke = tauri.core.invoke;
+        var tauriListen = tauri.event.listen;
 
         // 1. Fetch initial snapshot on page load
-        try {
-          const snap = await invoke('get_snapshot');
-          applySnapshot(snap);
-          setConnected(true);
-        } catch (err) {
-          console.error('[SysCtrl] get_snapshot failed:', err);
-          setConnected(false);
-        }
+        (async function () {
+          try {
+            const snap = await invoke('get_snapshot');
+            applySnapshot(snap);
+            setConnected(true);
+          } catch (err) {
+            console.error('[SysCtrl] get_snapshot failed:', err);
+            setConnected(false);
+          }
+        })();
 
         // 2. Listen for live "snapshot" events pushed by the backend at ~1 Hz
-        try {
-          await tauriListen('snapshot', function (event) {
-            try {
-              applySnapshot(event.payload);
-              setConnected(true);
-            } catch (err) {
-              console.error('[SysCtrl] error applying snapshot event:', err);
-            }
-          });
-        } catch (err) {
-          console.error('[SysCtrl] failed to register snapshot listener:', err);
-        }
+        (async function () {
+          try {
+            await tauriListen('snapshot', function (event) {
+              try {
+                applySnapshot(event.payload);
+                setConnected(true);
+              } catch (err) {
+                console.error('[SysCtrl] error applying snapshot event:', err);
+              }
+            });
+          } catch (err) {
+            console.error('[SysCtrl] failed to register snapshot listener:', err);
+          }
+        })();
       }
 
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', boot);
-      } else {
-        boot();
-      }
+      // Start by waiting for Tauri bridge to be ready
+      waitForTauri(boot);
+
+      // No need for DOMContentLoaded — waitForTauri handles async readiness
     })();
   </script>
 </body>

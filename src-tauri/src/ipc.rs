@@ -79,7 +79,15 @@ fn collect_snapshot(backends: &sensors::DetectedBackends) -> SystemSnapshot {
 #[tauri::command]
 pub async fn get_snapshot(state: tauri::State<'_, AppState>) -> Result<SystemSnapshot, String> {
     let guard = state.backends.lock().map_err(|e| e.to_string())?;
-    Ok(collect_snapshot(&guard))
+    let snapshot = collect_snapshot(&guard);
+    eprintln!("[DEBUG] cpu={}% temp={:?} gpus={} gpu0_usage={:?} fans={}",
+        snapshot.cpu.usage_percent,
+        snapshot.cpu.temp_celsius,
+        snapshot.gpus.len(),
+        snapshot.gpus.first().map(|g| g.usage_percent),
+        snapshot.fans.len()
+    );
+    Ok(snapshot)
 }
 
 /// Set a fan's duty cycle (0-100 %) via the privileged helper binary.
