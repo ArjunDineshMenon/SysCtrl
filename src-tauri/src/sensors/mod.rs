@@ -11,6 +11,9 @@ mod gpu_apple;
 #[cfg(target_os = "linux")]
 mod fan;
 
+// Mock backends (compiled on all platforms — no cfg gate).
+pub mod mock;
+
 #[cfg(target_os = "linux")]
 use crate::sensors::cpu::CpuSensorImpl;
 #[cfg(target_os = "linux")]

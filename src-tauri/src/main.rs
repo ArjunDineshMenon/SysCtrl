@@ -7,7 +7,16 @@ use ipc::AppState;
 use std::sync::Mutex;
 
 fn main() {
-    let backends = sensors::detect_backends();
+    // Check for the --mock flag before anything else.
+    // Usage:  cargo tauri dev -- -- --mock
+    //         cargo run -- --mock
+    let use_mock = std::env::args().any(|a| a == "--mock");
+
+    let backends = if use_mock {
+        sensors::mock::mock_backends()
+    } else {
+        sensors::detect_backends()
+    };
 
     let app_state = AppState {
         backends: Mutex::new(backends),
