@@ -1,13 +1,18 @@
 // Apple Silicon GPU sensor for Asahi Linux (open-source asahi/honeykrisp DRM driver).
 // Runs on Linux only — not macOS (which uses powermetrics via a separate backend).
 
+#[cfg(target_os = "linux")]
 use crate::sensors::{GpuReading, GpuSensor};
+#[cfg(target_os = "linux")]
 use anyhow::Result;
+#[cfg(target_os = "linux")]
 use std::fs;
+#[cfg(target_os = "linux")]
 use std::path::{Path, PathBuf};
 
 /// Apple GPU sensor using sysfs (Asahi DRM driver) + macsmc-hwmon for temperature.
 /// Each instance wraps a single DRM card device.
+#[cfg(target_os = "linux")]
 pub struct AppleGpuSensor {
     card_path: PathBuf,
     device_path: PathBuf,
@@ -15,6 +20,7 @@ pub struct AppleGpuSensor {
     cached_name: String,
 }
 
+#[cfg(target_os = "linux")]
 impl AppleGpuSensor {
     /// Probe all Apple Silicon GPUs by scanning `/sys/class/drm/card*`.
     /// Matches vendor ID 0x106b (Apple's PCI-ish vendor ID in Asahi stack) OR
@@ -109,6 +115,7 @@ impl AppleGpuSensor {
     }
 }
 
+#[cfg(target_os = "linux")]
 impl GpuSensor for AppleGpuSensor {
     fn read(&self) -> Result<GpuReading> {
         // Usage: best-effort via gpu_busy_percent (may be absent)
@@ -141,6 +148,7 @@ impl GpuSensor for AppleGpuSensor {
     }
 }
 
+#[cfg(target_os = "linux")]
 /// Check if device has Apple vendor ID (0x106b) in the Asahi stack.
 fn is_apple_vendor(device_path: &Path) -> bool {
     let vendor_path = device_path.join("vendor");
@@ -150,6 +158,7 @@ fn is_apple_vendor(device_path: &Path) -> bool {
     }
 }
 
+#[cfg(target_os = "linux")]
 /// Check if device's driver symlink points to "asahi" driver.
 /// Secondary check since vendor ID support has been inconsistent across kernels.
 fn is_asahi_driver(device_path: &Path) -> bool {
@@ -162,6 +171,7 @@ fn is_asahi_driver(device_path: &Path) -> bool {
     false
 }
 
+#[cfg(target_os = "linux")]
 /// Find the macsmc-hwmon directory by scanning `/sys/class/hwmon/hwmon*/name`
 /// for a name containing "macsmc". Returns the hwmon directory path if found.
 fn find_macsmc_hwmon() -> Option<PathBuf> {
@@ -180,5 +190,7 @@ fn find_macsmc_hwmon() -> Option<PathBuf> {
 }
 
 // The struct only contains PathBuf, Option<PathBuf>, and String — all Send + Sync.
+#[cfg(target_os = "linux")]
 unsafe impl Send for AppleGpuSensor {}
+#[cfg(target_os = "linux")]
 unsafe impl Sync for AppleGpuSensor {}

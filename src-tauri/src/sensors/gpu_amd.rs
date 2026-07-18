@@ -6,6 +6,7 @@ use anyhow::{Context, Result};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+#[cfg(target_os = "linux")]
 /// AMD GPU sensor using sysfs (amdgpu driver).
 /// Each instance wraps a single DRM card device and its associated hwmon directory.
 pub struct AmdGpuSensor {
@@ -15,6 +16,7 @@ pub struct AmdGpuSensor {
     cached_name: String,
 }
 
+#[cfg(target_os = "linux")]
 impl AmdGpuSensor {
     /// Probe all AMD GPUs by scanning `/sys/class/drm/card*`.
     /// Returns a sensor for each card with vendor ID 0x1002 (AMD).
@@ -72,6 +74,7 @@ impl AmdGpuSensor {
     }
 }
 
+#[cfg(target_os = "linux")]
 impl GpuSensor for AmdGpuSensor {
     fn read(&self) -> Result<GpuReading> {
         // Usage: read device/gpu_busy_percent (integer 0-100)
@@ -108,6 +111,7 @@ impl GpuSensor for AmdGpuSensor {
     }
 }
 
+#[cfg(target_os = "linux")]
 /// Check if the device at `device_path` has AMD vendor ID (0x1002).
 fn is_amd_device(device_path: &Path) -> bool {
     let vendor_path = device_path.join("vendor");
@@ -117,6 +121,7 @@ fn is_amd_device(device_path: &Path) -> bool {
     }
 }
 
+#[cfg(target_os = "linux")]
 /// Find the hwmon directory under `device/hwmon/` for temperature readings.
 /// Returns the first hwmon* directory found, or None if not present.
 fn find_hwmon_dir(device_path: &Path) -> Option<PathBuf> {
@@ -133,6 +138,7 @@ fn find_hwmon_dir(device_path: &Path) -> Option<PathBuf> {
     None
 }
 
+#[cfg(target_os = "linux")]
 /// Get a human-readable device name.
 /// Priority: device/product_name -> parse device/uevent for PCI_ID -> fallback "AMD GPU (cardN)"
 fn get_device_name(device_path: &Path, card_name: &str) -> String {
@@ -158,5 +164,7 @@ fn get_device_name(device_path: &Path, card_name: &str) -> String {
 }
 
 // The struct only contains PathBuf, Option<PathBuf>, and String — all Send + Sync.
+#[cfg(target_os = "linux")]
 unsafe impl Send for AmdGpuSensor {}
+#[cfg(target_os = "linux")]
 unsafe impl Sync for AmdGpuSensor {}

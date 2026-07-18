@@ -6,10 +6,15 @@
 // WRITE path: delegates to `/usr/local/bin/sysctl-helper` (a small setuid/polkit
 //             helper binary) so the GUI never needs root.
 
+#[cfg(target_os = "linux")]
 use crate::sensors::{FanController, FanReading};
+#[cfg(target_os = "linux")]
 use anyhow::{bail, Context, Result};
+#[cfg(target_os = "linux")]
 use std::fs;
+#[cfg(target_os = "linux")]
 use std::path::{Path, PathBuf};
+#[cfg(target_os = "linux")]
 use std::process::Command;
 
 // ---------------------------------------------------------------------------
@@ -17,6 +22,7 @@ use std::process::Command;
 // ---------------------------------------------------------------------------
 
 /// A single discovered fan header on the system.
+#[cfg(target_os = "linux")]
 #[derive(Debug, Clone)]
 struct FanEntry {
     /// Human-readable label (e.g. "CPU fan", "GPU fan 1", "Fan 2 (nct6775)").
@@ -31,6 +37,7 @@ struct FanEntry {
 ///
 /// Scans motherboard hwmon devices (`/sys/class/hwmon/hwmon*`) and discrete GPU
 /// hwmon devices (`/sys/class/drm/card*/device/hwmon/hwmon*`).
+#[cfg(target_os = "linux")]
 pub struct SysfsFanController {
     fans: Vec<FanEntry>,
 }
@@ -39,7 +46,9 @@ pub struct SysfsFanController {
 // SysfsFanController holds a Vec of those, so it is too.
 // The compiler can prove this on its own, but an explicit assertion makes the
 // intent visible and avoids any future-proofing surprises.
+#[cfg(target_os = "linux")]
 unsafe impl Send for SysfsFanController {}
+#[cfg(target_os = "linux")]
 unsafe impl Sync for SysfsFanController {}
 
 // ---------------------------------------------------------------------------
@@ -47,6 +56,7 @@ unsafe impl Sync for SysfsFanController {}
 // ---------------------------------------------------------------------------
 
 /// hwmon `name` values that belong to a CPU thermal/fan chip.
+#[cfg(target_os = "linux")]
 const CPU_CHIP_NAMES: &[&str] = &[
     "nct6775", "nct6776", "nct6779", "nct6791", "nct6792", "nct6793",
     "nct6795", "nct6796", "nct6797", "nct6798",
@@ -63,6 +73,7 @@ const CPU_CHIP_NAMES: &[&str] = &[
 ];
 
 /// Returns `true` if the hwmon `name` is a known CPU/motherboard super-I/O chip.
+#[cfg(target_os = "linux")]
 fn is_cpu_chip(name: &str) -> bool {
     let lower = name.to_ascii_lowercase();
     CPU_CHIP_NAMES.iter().any(|&n| lower == n)
@@ -70,6 +81,7 @@ fn is_cpu_chip(name: &str) -> bool {
 
 /// Returns `true` if `hwmon_dir` lives under `/sys/class/drm/card*` — i.e. it
 /// belongs to a discrete GPU.
+#[cfg(target_os = "linux")]
 fn is_gpu_hwmon(hwmon_dir: &Path) -> bool {
     // Canonical example: /sys/class/drm/card0/device/hwmon/hwmon3
     hwmon_dir
@@ -82,6 +94,7 @@ fn is_gpu_hwmon(hwmon_dir: &Path) -> bool {
 // Probing
 // ---------------------------------------------------------------------------
 
+#[cfg(target_os = "linux")]
 impl SysfsFanController {
     /// Scan the system for all fan headers.
     ///
@@ -171,6 +184,7 @@ impl SysfsFanController {
 // FanController trait implementation
 // ---------------------------------------------------------------------------
 
+#[cfg(target_os = "linux")]
 impl FanController for SysfsFanController {
     /// Read RPM and duty-cycle percentage for every discovered fan.
     fn read_all(&self) -> Result<Vec<FanReading>> {
@@ -266,6 +280,7 @@ impl FanController for SysfsFanController {
 // ---------------------------------------------------------------------------
 
 /// Read the `name` file inside a hwmon directory (e.g. "nct6775").
+#[cfg(target_os = "linux")]
 fn read_hwmon_name(hwmon_dir: &Path) -> String {
     fs::read_to_string(hwmon_dir.join("name"))
         .ok()
@@ -274,6 +289,7 @@ fn read_hwmon_name(hwmon_dir: &Path) -> String {
 }
 
 /// Extract the numeric index N from a filename matching `fanN_input`.
+#[cfg(target_os = "linux")]
 fn parse_fan_index(name: &str) -> Option<u32> {
     let rest = name.strip_prefix("fan")?;
     let num_str = rest.strip_suffix("_input")?;
@@ -285,6 +301,7 @@ fn parse_fan_index(name: &str) -> Option<u32> {
 ///  * If the hwmon `name` matches a known CPU chip → `"CPU fan"` (or `"CPU fan N"` when N > 1).
 ///  * If the hwmon dir lives under `/sys/class/drm/card*` → `"GPU fan N"`.
 ///  * Otherwise → `"Fan N (hwmon_name)"`.
+#[cfg(target_os = "linux")]
 fn build_label(hwmon_dir: &Path, hwmon_name: &str, fan_index: u32, gpu_counter: &mut u32) -> String {
     // Try the kernel-provided label first (fanN_label).
     let label_path = hwmon_dir.join(format!("fan{}_label", fan_index));
@@ -312,6 +329,7 @@ fn build_label(hwmon_dir: &Path, hwmon_name: &str, fan_index: u32, gpu_counter: 
 }
 
 /// Read a sysfs file containing a single unsigned integer.
+#[cfg(target_os = "linux")]
 fn read_u32(path: &Path) -> Option<u32> {
     fs::read_to_string(path).ok()?.trim().parse().ok()
 }

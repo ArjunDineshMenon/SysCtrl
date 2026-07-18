@@ -1,15 +1,22 @@
 // Intel GPU sensor implementation using sysfs (i915/Xe kernel drivers) + intel_gpu_top.
 // Supports Intel integrated graphics (i915) and newer Xe discrete/integrated GPUs.
 
+#[cfg(target_os = "linux")]
 use crate::sensors::{GpuReading, GpuSensor};
+#[cfg(target_os = "linux")]
 use anyhow::{Context, Result};
+#[cfg(target_os = "linux")]
 use serde::Deserialize;
+#[cfg(target_os = "linux")]
 use std::fs;
+#[cfg(target_os = "linux")]
 use std::path::{Path, PathBuf};
+#[cfg(target_os = "linux")]
 use std::process::Command;
 
 /// Intel GPU sensor using sysfs + intel_gpu_top for usage.
 /// Each instance wraps a single DRM card device and its associated hwmon directory.
+#[cfg(target_os = "linux")]
 pub struct IntelGpuSensor {
     card_path: PathBuf,
     device_path: PathBuf,
@@ -17,6 +24,7 @@ pub struct IntelGpuSensor {
     cached_name: String,
 }
 
+#[cfg(target_os = "linux")]
 impl IntelGpuSensor {
     /// Probe all Intel GPUs by scanning `/sys/class/drm/card*`.
     /// Returns a sensor for each card with vendor ID 0x8086 (Intel).
@@ -93,6 +101,7 @@ impl IntelGpuSensor {
     }
 }
 
+#[cfg(target_os = "linux")]
 impl GpuSensor for IntelGpuSensor {
     fn read(&self) -> Result<GpuReading> {
         // Usage: via intel_gpu_top (requires root or CAP_PERFMON)
@@ -133,6 +142,7 @@ impl GpuSensor for IntelGpuSensor {
     }
 }
 
+#[cfg(target_os = "linux")]
 /// Check if the device at `device_path` has Intel vendor ID (0x8086).
 fn is_intel_device(device_path: &Path) -> bool {
     let vendor_path = device_path.join("vendor");
@@ -142,6 +152,7 @@ fn is_intel_device(device_path: &Path) -> bool {
     }
 }
 
+#[cfg(target_os = "linux")]
 /// Find the hwmon directory under `device/hwmon/` for temperature readings.
 /// Returns the first hwmon* directory found, or None if not present.
 fn find_hwmon_dir(device_path: &Path) -> Option<PathBuf> {
@@ -158,6 +169,7 @@ fn find_hwmon_dir(device_path: &Path) -> Option<PathBuf> {
     None
 }
 
+#[cfg(target_os = "linux")]
 /// Get a human-readable device name.
 /// Priority: device/product_name -> parse device/uevent for PCI_ID -> fallback "Intel Graphics (cardN)"
 fn get_device_name(device_path: &Path, card_name: &str) -> String {
@@ -183,11 +195,13 @@ fn get_device_name(device_path: &Path, card_name: &str) -> String {
 }
 
 /// JSON structure for intel_gpu_top -J output.
+#[cfg(target_os = "linux")]
 #[derive(Debug, Deserialize)]
 struct IntelGpuTopOutput {
     engines: Vec<IntelGpuEngine>,
 }
 
+#[cfg(target_os = "linux")]
 #[derive(Debug, Deserialize)]
 struct IntelGpuEngine {
     name: String,
@@ -196,5 +210,7 @@ struct IntelGpuEngine {
 }
 
 // The struct only contains PathBuf, Option<PathBuf>, and String — all Send + Sync.
+#[cfg(target_os = "linux")]
 unsafe impl Send for IntelGpuSensor {}
+#[cfg(target_os = "linux")]
 unsafe impl Sync for IntelGpuSensor {}

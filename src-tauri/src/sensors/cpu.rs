@@ -11,10 +11,12 @@ use std::time::Duration;
 /// The hwmon path is resolved lazily on first read and cached in a OnceLock to avoid
 /// repeated filesystem scans. This is safe because the hwmon device path doesn't change
 /// at runtime.
+#[cfg(target_os = "linux")]
 pub struct LinuxCpuSensor {
     hwmon_path: OnceLock<Option<PathBuf>>,
 }
 
+#[cfg(target_os = "linux")]
 impl LinuxCpuSensor {
     pub fn new() -> Self {
         Self {
@@ -192,12 +194,14 @@ impl LinuxCpuSensor {
     }
 }
 
+#[cfg(target_os = "linux")]
 #[derive(Debug, Clone, Copy)]
 struct CpuStatSample {
     total: u64,
     idle: u64,
 }
 
+#[cfg(target_os = "linux")]
 impl CpuSensor for LinuxCpuSensor {
     fn read(&self) -> Result<CpuReading> {
         let usage_percent = Self::read_usage_percent()?;
@@ -216,6 +220,7 @@ impl CpuSensor for LinuxCpuSensor {
     }
 }
 
+#[cfg(target_os = "linux")]
 impl Default for LinuxCpuSensor {
     fn default() -> Self {
         Self::new()
@@ -223,4 +228,5 @@ impl Default for LinuxCpuSensor {
 }
 
 /// Type alias for the public API expected by detect_backends()
+#[cfg(target_os = "linux")]
 pub type CpuSensorImpl = LinuxCpuSensor;

@@ -1,19 +1,25 @@
 // NVIDIA GPU sensor implementation using nvml-wrapper
 // Provides multi-GPU support with cached device names and graceful NVML init failure handling.
 
+#[cfg(target_os = "linux")]
 use crate::sensors::{GpuReading, GpuSensor};
+#[cfg(target_os = "linux")]
 use anyhow::{Context, Result};
+#[cfg(target_os = "linux")]
 use nvml_wrapper::Nvml;
+#[cfg(target_os = "linux")]
 use nvml_wrapper::enum_wrappers::device::TemperatureSensor;
 
 /// NVIDIA GPU sensor using NVML (NVIDIA Management Library).
 /// Each instance wraps a single GPU device and caches its name at probe time.
+#[cfg(target_os = "linux")]
 pub struct NvidiaGpuSensor {
     nvml: std::sync::Arc<Nvml>,
     device_index: u32,
     cached_name: String,
 }
 
+#[cfg(target_os = "linux")]
 impl NvidiaGpuSensor {
     /// Probe all available NVIDIA GPUs and return a sensor for each.
     /// Returns empty Vec if NVML initialization fails (e.g., no NVIDIA driver).
@@ -51,6 +57,7 @@ impl NvidiaGpuSensor {
     }
 }
 
+#[cfg(target_os = "linux")]
 impl GpuSensor for NvidiaGpuSensor {
     fn read(&self) -> Result<GpuReading> {
         // Only the device handle lookup itself is treated as a hard failure —
