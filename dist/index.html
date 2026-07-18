@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SysCtrl</title>
+  <style>
+*{box-sizing:border-box;margin:0;padding:0}
+.app{display:flex;height:560px;border:0.5px solid var(--border);border-radius:12px;overflow:hidden;background:var(--surface-1);font-size:13px}
+.sidebar{width:180px;border-right:0.5px solid var(--border);display:flex;flex-direction:column;background:var(--surface-0);padding:12px 0}
+.sidebar-logo{padding:0 16px 12px;border-bottom:0.5px solid var(--border);margin-bottom:8px}
+.sidebar-logo p{font-size:15px;font-weight:500;color:var(--text-primary)}
+.sidebar-logo span{font-size:11px;color:var(--text-muted)}
+.nav-section{padding:4px 8px;margin-top:4px}
+.nav-section-label{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);padding:0 8px;margin-bottom:4px}
+.nav-item{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:6px;cursor:pointer;color:var(--text-secondary);transition:background .1s}
+.nav-item:hover{background:var(--surface-1)}
+.nav-item.active{background:var(--surface-2);color:var(--text-primary);border:0.5px solid var(--border)}
+.nav-item i{font-size:16px;width:18px}
+.nav-item span{font-size:13px}
+.nav-future{opacity:.45}
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.topbar{padding:12px 20px;border-bottom:0.5px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.topbar-left p{font-size:15px;font-weight:500;color:var(--text-primary)}
+.topbar-left span{font-size:12px;color:var(--text-muted)}
+.status-pill{display:flex;align-items:center;gap:6px;background:var(--bg-success);border:0.5px solid var(--border-success);border-radius:20px;padding:4px 10px;font-size:12px;color:var(--text-success)}
+.dot{width:6px;height:6px;border-radius:50%;background:currentColor}
+.content{flex:1;overflow-y:auto;padding:16px 20px;display:flex;flex-direction:column;gap:14px}
+.stat-row{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.stat-card{background:var(--surface-2);border:0.5px solid var(--border);border-radius:8px;padding:12px}
+.stat-card .label{font-size:11px;color:var(--text-muted);margin-bottom:4px}
+.stat-card .value{font-size:20px;font-weight:500;color:var(--text-primary);line-height:1.2}
+.stat-card .sub{font-size:11px;color:var(--text-secondary);margin-top:2px}
+.bar-track{height:4px;background:var(--border-strong);border-radius:2px;margin-top:6px}
+.bar-fill{height:4px;border-radius:2px}
+.panels-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;flex:1}
+.panel{background:var(--surface-2);border:0.5px solid var(--border);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:8px}
+.panel-title{font-size:13px;font-weight:500;color:var(--text-primary);display:flex;align-items:center;gap:6px}
+.panel-title i{font-size:15px;color:var(--text-muted)}
+.chart-area{height:80px;position:relative;border-radius:4px;overflow:hidden;background:var(--surface-1)}
+.fan-row{display:flex;align-items:center;gap:8px;margin-top:4px}
+.fan-label{font-size:12px;color:var(--text-secondary);width:64px;flex-shrink:0}
+.fan-slider{flex:1}
+.fan-val{font-size:12px;font-weight:500;color:var(--text-primary);width:38px;text-align:right}
+.fan-rpm{font-size:11px;color:var(--text-muted);width:60px;text-align:right}
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="sidebar-logo">
+        <p>SysCtrl</p>
+        <span>System Control</span>
+      </div>
+      <nav>
+        <div class="nav-section">
+          <div class="nav-section-label">Monitoring</div>
+          <a class="nav-item active" href="#"><i>📊</i><span>Dashboard</span></a>
+          <a class="nav-item" href="#"><i>📈</i><span>History</span></a>
+          <a class="nav-item" href="#"><i>⚡</i><span>Power</span></a>
+        </div>
+        <div class="nav-section">
+          <div class="nav-section-label">Control</div>
+          <a class="nav-item" href="#"><i>🌡️</i><span>Fans</span></a>
+          <a class="nav-item" href="#"><i>⚙️</i><span>Profiles</span></a>
+          <a class="nav-item nav-future" href="#"><i>🔧</i><span>Overclock</span></a>
+        </div>
+        <div class="nav-section">
+          <div class="nav-section-label">Settings</div>
+          <a class="nav-item" href="#"><i>⚙️</i><span>General</span></a>
+          <a class="nav-item" href="#"><i>🔔</i><span>Alerts</span></a>
+          <a class="nav-item" href="#"><i>🔄</i><span>Updates</span></a>
+        </div>
+      </nav>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div class="topbar-left">
+          <p>Dashboard</p>
+          <span>Real-time system monitoring</span>
+        </div>
+        <div class="status-pill" id="status-pill">
+          <span class="dot" id="status-dot"></span>
+          <span id="status-text">All sensors active</span>
+        </div>
+      </header>
+
+      <div class="content">
+        <div class="stat-row">
+          <!-- CPU Usage Card -->
+          <div class="stat-card">
+            <div class="label">CPU Usage</div>
+            <div class="value" id="cpu-usage-val">0%</div>
+            <div class="sub">8 cores · 3.4 GHz</div>
+            <div class="bar-track"><div class="bar-fill" id="cpu-usage-bar" style="width:0%;background:var(--accent)"></div></div>
+          </div>
+
+          <!-- CPU Temp Card -->
+          <div class="stat-card">
+            <div class="label">CPU Temp</div>
+            <div class="value" id="cpu-temp-val">0°C</div>
+            <div class="sub">Package temperature</div>
+            <div class="bar-track"><div class="bar-fill" id="cpu-temp-bar" style="width:0%;background:var(--accent)"></div></div>
+          </div>
+
+          <!-- GPU Usage Card -->
+          <div class="stat-card">
+            <div class="label">GPU Usage</div>
+            <div class="value" id="gpu-usage-val">0%</div>
+            <div class="sub">RTX 3060 · 6 GB VRAM</div>
+            <div class="bar-track"><div class="bar-fill" id="gpu-usage-bar" style="width:0%;background:var(--accent)"></div></div>
+          </div>
+
+          <!-- RAM Card (TODO: not wired yet) -->
+          <div class="stat-card">
+            <div class="label">RAM</div>
+            <div class="value" id="ram-used-val">0 GB / 0 GB · 0%</div>
+            <div class="sub">DDR4-3200</div>
+            <div class="bar-track"><div class="bar-fill" id="ram-used-bar" style="width:0%;background:var(--accent)"></div></div>
+          </div>
+        </div>
+
+        <div class="panels-row">
+          <!-- Chart Panel -->
+          <div class="panel">
+            <div class="panel-title">
+              <i>📈</i> Usage History
+              <div style="margin-left:auto;display:flex;gap:4px">
+                <button class="nav-item" id="chart-tab-1m" data-range="1m" style="padding:2px 8px;font-size:11px">1m</button>
+                <button class="nav-item" id="chart-tab-5m" data-range="5m" style="padding:2px 8px;font-size:11px">5m</button>
+                <button class="nav-item active" id="chart-tab-1h" data-range="1h" style="padding:2px 8px;font-size:11px">1h</button>
+              </div>
+            </div>
+            <div class="chart-area">
+              <svg width="100%" height="100%" viewBox="0 0 300 80" preserveAspectRatio="none">
+                <defs>
+                  <linearGradient id="cpuGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.4"/>
+                    <stop offset="100%" stop-color="var(--accent)" stop-opacity="0"/>
+                  </linearGradient>
+                  <linearGradient id="gpuGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="var(--accent-gpu)" stop-opacity="0.4"/>
+                    <stop offset="100%" stop-color="var(--accent-gpu)" stop-opacity="0"/>
+                  </linearGradient>
+                </defs>
+                <polyline id="chart-cpu-polyline" fill="url(#cpuGrad)" stroke="var(--accent)" stroke-width="1.5" points="0,80 300,80"/>
+                <polyline id="chart-gpu-polyline" fill="url(#gpuGrad)" stroke="var(--accent-gpu)" stroke-width="1.5" points="0,80 300,80"/>
+              </svg>
+            </div>
+          </div>
+
+          <!-- Fan Control Panel -->
+          <div class="panel">
+            <div class="panel-title"><i>🌬️</i> Fan Control</div>
+            
+            <div class="fan-row">
+              <span class="fan-label">CPU Fan</span>
+              <input type="range" class="fan-slider" id="fan-cpu-slider" min="0" max="100" value="60">
+              <span class="fan-val" id="fan-cpu-val">60%</span>
+              <span class="fan-rpm" id="fan-cpu-rpm">1800 RPM</span>
+            </div>
+            
+            <div class="fan-row">
+              <span class="fan-label">GPU Fan 1</span>
+              <input type="range" class="fan-slider" id="fan-gpu1-slider" min="0" max="100" value="35">
+              <span class="fan-val" id="fan-gpu1-val">35%</span>
+              <span class="fan-rpm" id="fan-gpu1-rpm">1050 RPM</span>
+            </div>
+            
+            <div class="fan-row">
+              <span class="fan-label">GPU Fan 2</span>
+              <input type="range" class="fan-slider" id="fan-gpu2-slider" min="0" max="100" value="35">
+              <span class="fan-val" id="fan-gpu2-val">35%</span>
+              <span class="fan-rpm" id="fan-gpu2-rpm">1050 RPM</span>
+            </div>
+
+            <div style="display:flex;gap:8px;margin-top:8px">
+              <button class="nav-item" id="fan-auto-btn" style="flex:1;padding:8px">Auto</button>
+              <button class="nav-item" id="fan-max-btn" style="flex:1;padding:8px">Max</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    // ============================================================================
+    // SysCtrl Dashboard — Tauri v2 IPC wiring
+    // ============================================================================
+    //
+    // IDs already present in the HTML that this script targets:
+    //   cpu-usage-val, cpu-usage-bar  — CPU usage stat card
+    //   cpu-temp-val,  cpu-temp-bar   — CPU temp stat card
+    //   gpu-usage-val, gpu-usage-bar  — GPU usage stat card (gpus[0] only;
+    //                                   multi-GPU display is a future enhancement)
+    //   ram-used-val,  ram-used-bar   — RAM card (NOT wired — no RAM field in
+    //                                   SystemSnapshot yet; left static)
+    //   fan-cpu-slider/val/rpm        — pre-existing fan row 0
+    //   fan-gpu1-slider/val/rpm       — pre-existing fan row 1
+    //   fan-gpu2-slider/val/rpm       — pre-existing fan row 2
+    //   chart-cpu-polyline            — SVG polyline for CPU history
+    //   chart-gpu-polyline            — SVG polyline for GPU history
+    //   chart-tab-1m/5m/1h            — chart range tabs
+    //   status-dot, status-text       — connection status pill
+    //
+    // No id attributes were added to the HTML — all required ids were already
+    // present in dist/index.html.
+
+    (function () {
+      'use strict';
+
+      // -----------------------------------------------------------------------
+      // Tauri v2 bridge — invoke & event.listen are under window.__TAURI__
+      // -----------------------------------------------------------------------
+      const tauri = window.__TAURI__;
+      const invoke = tauri ? tauri.core.invoke : null;
+      const tauriListen = tauri ? tauri.event.listen : null;
+
+      // -----------------------------------------------------------------------
+      // Helpers
+      // -----------------------------------------------------------------------
+
+      /** null-safe number formatter. Returns '—' when val is null/undefined. */
+      function fmt(val, decimals, suffix) {
+        if (val == null) return '\u2014';
+        return Number(val).toFixed(decimals) + (suffix || '');
+      }
+
+      function setText(el, text) {
+        if (el && el.textContent !== text) el.textContent = text;
+      }
+      function setStyle(el, prop, val) {
+        if (el && el.style[prop] !== val) el.style[prop] = val;
+      }
+      function setAttr(el, attr, val) {
+        if (el && el.getAttribute(attr) !== val) el.setAttribute(attr, val);
+      }
+
+      /** Simple debounce — returns a function that fires `fn` only after
+       *  `wait` ms of silence since the last call. */
+      function debounce(fn, wait) {
+        let timer;
+        return function (...args) {
+          clearTimeout(timer);
+          timer = setTimeout(() => fn.apply(this, args), wait);
+        };
+      }
+
+      // -----------------------------------------------------------------------
+      // Chart history state (kept outside Tauri data model)
+      // -----------------------------------------------------------------------
+      const chartHistory = { cpu: [], gpu: [] };
+      const MAX_HISTORY = 60;
+
+      function pushHistory(arr, val) {
+        arr.push(val == null ? 0 : val);
+        if (arr.length > MAX_HISTORY) arr.shift();
+      }
+
+      function historyToPoints(history, width, height) {
+        if (!history.length) return '0,' + height + ' ' + width + ',' + height;
+        const stepX = width / Math.max(1, history.length - 1);
+        return history
+          .map((v, i) => {
+            const x = i * stepX;
+            const y = height - (v / 100) * height; // invert: 0% = bottom
+            return x.toFixed(1) + ',' + y.toFixed(1);
+          })
+          .join(' ');
+      }
+
+      // -----------------------------------------------------------------------
+      // DOM references
+      // -----------------------------------------------------------------------
+      const els = {
+        cpuUsageVal:      document.getElementById('cpu-usage-val'),
+        cpuUsageBar:      document.getElementById('cpu-usage-bar'),
+        cpuTempVal:       document.getElementById('cpu-temp-val'),
+        cpuTempBar:       document.getElementById('cpu-temp-bar'),
+        gpuUsageVal:      document.getElementById('gpu-usage-val'),
+        gpuUsageBar:      document.getElementById('gpu-usage-bar'),
+        // TODO: RAM not wired yet — SystemSnapshot has no RAM field.
+        ramUsedVal:       document.getElementById('ram-used-val'),
+        ramUsedBar:       document.getElementById('ram-used-bar'),
+        chartCpuPolyline: document.getElementById('chart-cpu-polyline'),
+        chartGpuPolyline: document.getElementById('chart-gpu-polyline'),
+        chartTabs:        document.querySelectorAll('#chart-tab-1m, #chart-tab-5m, #chart-tab-1h'),
+        statusDot:        document.getElementById('status-dot'),
+        statusText:       document.getElementById('status-text'),
+      };
+
+      // -----------------------------------------------------------------------
+      // Fan row management
+      // -----------------------------------------------------------------------
+      // The HTML has 3 pre-built .fan-row elements. We map backend fans[] by
+      // index onto these rows, cloning the last row if there are more fans.
+
+      /** Collect the fan-panel container so we can append cloned rows. */
+      const fanPanel = (function () {
+        const s = document.getElementById('fan-cpu-slider');
+        return s ? s.closest('.panel') : null;
+      })();
+
+      /** All pre-existing .fan-row elements (in DOM order). */
+      const staticFanRows = Array.from(document.querySelectorAll('.fan-row'));
+
+      /** Returns the .fan-row at index i, cloning the last static one if needed. */
+      function ensureFanRow(i) {
+        if (staticFanRows[i]) return staticFanRows[i];
+        // Clone the last available row and append it before the button row
+        const template = staticFanRows[staticFanRows.length - 1];
+        if (!template || !fanPanel) return null;
+        const clone = template.cloneNode(true);
+        // Clear cloned ids to avoid duplicates — we'll reference by DOM position
+        clone.querySelectorAll('[id]').forEach(el => el.removeAttribute('id'));
+        // Insert before the button-row div (last child of .panel)
+        const btnRow = fanPanel.querySelector('div[style*="display:flex"]');
+        fanPanel.insertBefore(clone, btnRow || null);
+        staticFanRows.push(clone);
+        return clone;
+      }
+
+      // Per-fan debounced set_fan_speed callers, keyed by fan label.
+      const fanDebouncers = {};
+
+      /** Wire a single fan row to backend data. */
+      function initFanRow(row, fan) {
+        if (!row) return;
+        const slider = row.querySelector('.fan-slider');
+        const valEl  = row.querySelector('.fan-val');
+        const rpmEl  = row.querySelector('.fan-rpm');
+        const labelEl = row.querySelector('.fan-label');
+
+        if (labelEl) setText(labelEl, fan.label);
+
+        // Set initial slider value from backend
+        const pct = fan.percent != null ? fan.percent : 0;
+        if (slider) slider.value = pct;
+        if (valEl)  setText(valEl, pct + '%');
+        if (rpmEl)  setText(rpmEl, fan.rpm != null ? fan.rpm + ' RPM' : '\u2014');
+
+        if (!slider) return;
+
+        if (!fan.writable) {
+          // Read-only fan — disable slider and gray it out
+          slider.disabled = true;
+          slider.style.opacity = '0.4';
+          return;
+        }
+
+        // Build a per-label debouncer (150 ms) that calls set_fan_speed
+        if (!fanDebouncers[fan.label]) {
+          fanDebouncers[fan.label] = debounce(async function (label, percent) {
+            if (!invoke) return;
+            try {
+              await invoke('set_fan_speed', { label, percent });
+            } catch (err) {
+              console.error('[SysCtrl] set_fan_speed failed:', err);
+            }
+          }, 150);
+        }
+
+        slider.addEventListener('input', function (e) {
+          const v = parseInt(e.target.value, 10);
+          if (valEl) setText(valEl, v + '%');
+          fanDebouncers[fan.label](fan.label, v);
+        });
+      }
+
+      /** Update RPM display for an already-initialised row. */
+      function updateFanRow(row, fan) {
+        if (!row) return;
+        const rpmEl = row.querySelector('.fan-rpm');
+        if (rpmEl) setText(rpmEl, fan.rpm != null ? fan.rpm + ' RPM' : '\u2014');
+        // Note: we intentionally do NOT move the slider back to fan.percent on
+        // live updates — the user may be actively dragging it. Only RPM is
+        // refreshed from the backend so the display stays in sync.
+      }
+
+      // -----------------------------------------------------------------------
+      // Snapshot rendering
+      // -----------------------------------------------------------------------
+      let fansInitialised = false;
+
+      function applySnapshot(snap) {
+        const cpu = snap.cpu || {};
+        const gpus = snap.gpus || [];
+        const fans = snap.fans || [];
+
+        // -- CPU usage --
+        const cpuPct = cpu.usage_percent != null ? cpu.usage_percent : 0;
+        setText(els.cpuUsageVal, fmt(cpuPct, 0, '%'));
+        setStyle(els.cpuUsageBar, 'width', cpuPct.toFixed(1) + '%');
+
+        // -- CPU temp (with warning colouring) --
+        const temp = cpu.temp_celsius;
+        setText(els.cpuTempVal, temp != null ? fmt(temp, 0, '\u00b0C') : '\u2014');
+        setStyle(els.cpuTempBar, 'width', temp != null ? Math.min(temp, 100).toFixed(1) + '%' : '0%');
+        if (els.cpuTempVal) {
+          els.cpuTempVal.style.color =
+            temp >= 85 ? 'var(--text-danger)'
+            : temp >= 70 ? 'var(--text-warning)'
+            : '';
+        }
+
+        // -- GPU (gpus[0] only; multi-GPU display is a future enhancement) --
+        const gpu = gpus.length > 0 ? gpus[0] : null;
+        const gpuPct = gpu && gpu.usage_percent != null ? gpu.usage_percent : 0;
+        setText(els.gpuUsageVal, gpu ? fmt(gpuPct, 0, '%') : '\u2014');
+        setStyle(els.gpuUsageBar, 'width', gpu ? gpuPct.toFixed(1) + '%' : '0%');
+
+        // -- RAM: TODO: not wired yet — no RAM field in SystemSnapshot --
+        // (left static — els.ramUsedVal / els.ramUsedBar are not updated here)
+
+        // -- Chart history --
+        pushHistory(chartHistory.cpu, cpuPct);
+        pushHistory(chartHistory.gpu, gpuPct);
+        renderChart();
+
+        // -- Fans: initialise rows on first snapshot, update RPM on subsequent ones --
+        if (!fansInitialised) {
+          fans.forEach((fan, i) => initFanRow(ensureFanRow(i), fan));
+          fansInitialised = true;
+        } else {
+          fans.forEach((fan, i) => updateFanRow(staticFanRows[i] || null, fan));
+        }
+      }
+
+      // -----------------------------------------------------------------------
+      // Chart rendering
+      // -----------------------------------------------------------------------
+      function renderChart() {
+        const cpuPts = historyToPoints(chartHistory.cpu, 300, 80);
+        const gpuPts = historyToPoints(chartHistory.gpu, 300, 80);
+        setAttr(els.chartCpuPolyline, 'points', cpuPts);
+        setAttr(els.chartGpuPolyline, 'points', gpuPts);
+      }
+
+      // -----------------------------------------------------------------------
+      // Chart tab switching
+      // -----------------------------------------------------------------------
+      els.chartTabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+          els.chartTabs.forEach(t => t.classList.toggle('active', t === tab));
+          // TODO: fetch history for selected range via a future Tauri command
+        });
+      });
+
+      // -----------------------------------------------------------------------
+      // Status indicator helpers
+      // -----------------------------------------------------------------------
+      function setConnected(ok) {
+        if (els.statusDot)  els.statusDot.style.background = ok ? '' : 'var(--text-danger)';
+        if (els.statusText) setText(els.statusText, ok ? 'All sensors active' : 'Sensors disconnected');
+      }
+
+      // -----------------------------------------------------------------------
+      // Boot: initial snapshot + live event listener
+      // -----------------------------------------------------------------------
+      async function boot() {
+        if (!invoke || !tauriListen) {
+          // Not running inside Tauri (e.g. opened in browser for design preview).
+          console.warn('[SysCtrl] window.__TAURI__ not available — running in static preview mode.');
+          setConnected(false);
+          return;
+        }
+
+        // 1. Fetch initial snapshot on page load
+        try {
+          const snap = await invoke('get_snapshot');
+          applySnapshot(snap);
+          setConnected(true);
+        } catch (err) {
+          console.error('[SysCtrl] get_snapshot failed:', err);
+          setConnected(false);
+        }
+
+        // 2. Listen for live "snapshot" events pushed by the backend at ~1 Hz
+        try {
+          await tauriListen('snapshot', function (event) {
+            try {
+              applySnapshot(event.payload);
+              setConnected(true);
+            } catch (err) {
+              console.error('[SysCtrl] error applying snapshot event:', err);
+            }
+          });
+        } catch (err) {
+          console.error('[SysCtrl] failed to register snapshot listener:', err);
+        }
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', boot);
+      } else {
+        boot();
+      }
+    })();
+  </script>
+</body>
+</html>
