@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "identifier": "com.sysctrl.app",
   "build": {
-    "frontendDist": "../"
+    "frontendDist": "../dist"
   },
   "app": {
     "windows": [

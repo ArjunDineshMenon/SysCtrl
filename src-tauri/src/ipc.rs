@@ -8,7 +8,7 @@
 // `SystemSnapshot` events to the frontend at 1 Hz, so the UI can simply
 // listen for the "sysctrl://snapshot" event rather than polling.
 
-use crate::sensors::{self, CpuReading, SystemSnapshot...};
+use crate::sensors::{self, CpuReading, SystemSnapshot};
 use std::sync::Mutex;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager};
