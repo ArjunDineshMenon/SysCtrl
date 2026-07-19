@@ -10,12 +10,16 @@ mod gpu_intel;
 mod gpu_apple;
 #[cfg(target_os = "linux")]
 mod fan;
+#[cfg(target_os = "linux")]
+mod disk;
 
 // Mock backends (compiled on all platforms — no cfg gate).
 pub mod mock;
 
 #[cfg(target_os = "linux")]
 use crate::sensors::cpu::CpuSensorImpl;
+#[cfg(target_os = "linux")]
+use crate::sensors::disk::SysinfoDiskSensor;
 #[cfg(target_os = "linux")]
 use crate::sensors::fan::SysfsFanController;
 #[cfg(target_os = "linux")]
@@ -43,8 +47,11 @@ pub struct GpuReading {
     pub name: String,
     pub usage_percent: Option<f32>,
     pub temp_celsius: Option<f32>,
+    pub clock_mhz: Option<u32>,
+    pub is_integrated: bool,
     pub vram_used_mb: Option<u32>,
     pub vram_total_mb: Option<u32>,
+    pub vram_type: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -60,6 +67,26 @@ pub struct RamReading {
     pub used_mb: u32,
     pub total_mb: u32,
     pub percent: f32,
+    pub model: Option<String>,
+    pub speed_mhz: Option<u32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DiskReading {
+    /// Block device name, e.g. "nvme0n1" or "sda".
+    pub device: String,
+    /// Model string from the kernel (e.g. "Samsung SSD 980").
+    pub model: Option<String>,
+    /// Mount point this usage figure corresponds to (e.g. "/").
+    pub mount: Option<String>,
+    /// Total capacity in bytes.
+    pub total_bytes: u64,
+    /// Used bytes.
+    pub used_bytes: u64,
+    /// Sustained read throughput in MB/s (best-effort, may be None).
+    pub read_rate_mbps: Option<f32>,
+    /// Sustained write throughput in MB/s (best-effort, may be None).
+    pub write_rate_mbps: Option<f32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -68,16 +95,28 @@ pub struct SystemSnapshot {
     pub gpus: Vec<GpuReading>,
     pub fans: Vec<FanReading>,
     pub ram: RamReading,
+    pub disks: Vec<DiskReading>,
 }
 
-/// Read RAM usage from /proc/meminfo.
-/// Uses MemTotal and MemAvailable to compute used memory (same as `free` and `htop`).
+/// Read RAM usage from /proc/meminfo and DIMM model/speed via `dmidecode`.
+///
+/// MemTotal/MemAvailable compute used memory (same as `free`/`htop`).  DIMM
+/// model + speed are best-effort: we shell out to `dmidecode -t memory`, which
+/// normally requires root.  If it's missing, denied, or unparseable we simply
+/// leave those fields `None` — the snapshot must never fail because of RAM
+/// metadata we can't read.
 pub fn read_ram() -> RamReading {
-    let fallback = RamReading { used_mb: 0, total_mb: 0, percent: 0.0 };
+    let (model, speed_mhz) = read_ram_metadata();
 
     let contents = match fs::read_to_string("/proc/meminfo") {
         Ok(c) => c,
-        Err(_) => return fallback,
+        Err(_) => return RamReading {
+            used_mb: 0,
+            total_mb: 0,
+            percent: 0.0,
+            model,
+            speed_mhz,
+        },
     };
 
     let mut total_kb: u64 = 0;
@@ -95,7 +134,13 @@ pub fn read_ram() -> RamReading {
     }
 
     if total_kb == 0 {
-        return fallback;
+        return RamReading {
+            used_mb: 0,
+            total_mb: 0,
+            percent: 0.0,
+            model,
+            speed_mhz,
+        };
     }
 
     let used_kb = total_kb.saturating_sub(available_kb);
@@ -103,7 +148,70 @@ pub fn read_ram() -> RamReading {
     let used_mb = (used_kb / 1024) as u32;
     let percent = (used_kb as f64 / total_kb as f64 * 100.0) as f32;
 
-    RamReading { used_mb, total_mb, percent }
+    RamReading {
+        used_mb,
+        total_mb,
+        percent,
+        model,
+        speed_mhz,
+    }
+}
+
+/// Best-effort DIMM model + speed via `dmidecode -t memory`.
+///
+/// Returns `(None, None)` if dmidecode is unavailable, denied (no root), or the
+/// output can't be parsed.  Never errors — this is purely supplementary info.
+fn read_ram_metadata() -> (Option<String>, Option<u32>) {
+    let output = std::process::Command::new("dmidecode")
+        .args(["-t", "memory"])
+        .output()
+        .ok();
+
+    let output = match output {
+        Some(o) if o.status.success() => o,
+        _ => return (None, None),
+    };
+
+    let text = String::from_utf8_lossy(&output.stdout);
+
+    let mut model: Option<String> = None;
+    let mut speed: Option<u32> = None;
+
+    for line in text.lines() {
+        let line = line.trim();
+        if model.is_none() {
+            if let Some(rest) = line.strip_prefix("Type:") {
+                let v = rest.trim();
+                // Ignore the generic "Type: DDR4" vs part-number ambiguity by
+                // preferring a real Part Number when present.
+                if !v.is_empty() && v != "Unknown" && !v.starts_with("Other") {
+                    // Keep DDRx type as the model fallback.
+                    if v.starts_with("DDR") {
+                        model = Some(v.to_string());
+                    }
+                }
+            } else if let Some(rest) = line.strip_prefix("Part Number:") {
+                let v = rest.trim();
+                if !v.is_empty() && v != "Unknown" && v != "Not Specified" {
+                    model = Some(v.to_string());
+                }
+            }
+        }
+        if speed.is_none() {
+            if let Some(rest) = line.strip_prefix("Speed:") {
+                let v = rest.trim().trim_end_matches("MT/s").trim_end_matches("MHz").trim();
+                if let Ok(n) = v.parse::<u32>() {
+                    speed = Some(n);
+                }
+            }
+        }
+        // Stop early once we have both from the first populated DIMM.
+        if model.is_some() && speed.is_some() {
+            break;
+        }
+    }
+
+    (model, speed)
 }
 
 /// Parse a /proc/meminfo value line like "  12345 kB" into a u64 (kB).
@@ -131,10 +239,15 @@ pub trait FanController: Send + Sync {
     fn set_percent(&self, fan_label: &str, percent: u8) -> Result<()>;
 }
 
+pub trait DiskSensor: Send + Sync {
+    fn read_all(&self) -> Result<Vec<DiskReading>>;
+}
+
 pub struct DetectedBackends {
     pub cpu: Box<dyn CpuSensor>,
     pub gpus: Vec<Box<dyn GpuSensor>>,
     pub fan: Box<dyn FanController>,
+    pub disks: Box<dyn DiskSensor>,
 }
 
 /// No-op CPU sensor for non-Linux platforms (Windows, macOS).
@@ -167,6 +280,17 @@ impl FanController for NoopFanController {
 
     fn set_percent(&self, _fan_label: &str, _percent: u8) -> Result<()> {
         Ok(())
+    }
+}
+
+/// No-op disk sensor for non-Linux platforms.
+#[cfg(not(target_os = "linux"))]
+pub struct NoopDiskSensor;
+
+#[cfg(not(target_os = "linux"))]
+impl DiskSensor for NoopDiskSensor {
+    fn read_all(&self) -> Result<Vec<DiskReading>> {
+        Ok(vec![])
     }
 }
 
@@ -214,5 +338,12 @@ pub fn detect_backends() -> DetectedBackends {
     #[cfg(not(target_os = "linux"))]
     let fan = Box::new(NoopFanController) as Box<dyn FanController>;
 
-    DetectedBackends { cpu, gpus, fan }
+    // ── Disk probing ─────────────────────────────────────────────────────
+    #[cfg(target_os = "linux")]
+    let disks = Box::new(SysinfoDiskSensor::new()) as Box<dyn DiskSensor>;
+
+    #[cfg(not(target_os = "linux"))]
+    let disks = Box::new(NoopDiskSensor) as Box<dyn DiskSensor>;
+
+    DetectedBackends { cpu, gpus, fan, disks }
 }

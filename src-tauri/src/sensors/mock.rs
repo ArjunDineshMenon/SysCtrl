@@ -16,7 +16,8 @@
 //   Fan 2      : "chassis_fan" — NOT writable (tests disabled-slider path)
 
 use crate::sensors::{
-    CpuReading, CpuSensor, DetectedBackends, FanController, FanReading, GpuReading, GpuSensor,
+    CpuReading, CpuSensor, DetectedBackends, DiskReading, DiskSensor, FanController, FanReading,
+    GpuReading, GpuSensor,
 };
 use anyhow::Result;
 use std::f64::consts::TAU; // 2π
@@ -85,6 +86,8 @@ pub struct MockGpuSensor {
     pub vram_total_mb: u32,
     /// Phase offset (seconds) so the two GPUs don't oscillate in sync
     pub phase: f64,
+    /// Whether this is an integrated GPU (shown as a badge in the UI)
+    pub is_integrated: bool,
 }
 
 impl GpuSensor for MockGpuSensor {
@@ -94,6 +97,9 @@ impl GpuSensor for MockGpuSensor {
 
         // Temperature: 35–85°C range, correlated with usage
         let temp_celsius = lerp(35.0, 85.0, t) as f32;
+
+        // Clock: 800–2500 MHz, correlated with usage
+        let clock_mhz = lerp(800.0, 2500.0, t) as u32;
 
         // VRAM used: proportional-ish to usage (25–80% of total)
         let vram_used_mb = lerp(
@@ -106,8 +112,11 @@ impl GpuSensor for MockGpuSensor {
             name: self.gpu_name.to_owned(),
             usage_percent: Some(usage_percent),
             temp_celsius: Some(temp_celsius),
+            clock_mhz: Some(clock_mhz),
+            is_integrated: self.is_integrated,
             vram_used_mb: Some(vram_used_mb),
             vram_total_mb: Some(self.vram_total_mb),
+            vram_type: None,
         })
     }
 
@@ -175,6 +184,41 @@ impl FanController for MockFanController {
 // Public constructor
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// MockDiskSensor  (two fixed fake disks)
+// ---------------------------------------------------------------------------
+
+pub struct MockDiskSensor;
+
+impl DiskSensor for MockDiskSensor {
+    fn read_all(&self) -> Result<Vec<DiskReading>> {
+        Ok(vec![
+            DiskReading {
+                device: "nvme0n1".to_owned(),
+                model: Some("Mock NVMe SSD 1TB".to_owned()),
+                mount: Some("/".to_owned()),
+                total_bytes: 1_000_000_000_000,
+                used_bytes: 420_000_000_000,
+                read_rate_mbps: None,
+                write_rate_mbps: None,
+            },
+            DiskReading {
+                device: "sda".to_owned(),
+                model: Some("Mock SATA HDD 2TB".to_owned()),
+                mount: Some("/data".to_owned()),
+                total_bytes: 2_000_000_000_000,
+                used_bytes: 1_300_000_000_000,
+                read_rate_mbps: None,
+                write_rate_mbps: None,
+            },
+        ])
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Public constructor
+// ---------------------------------------------------------------------------
+
 /// Build a `DetectedBackends` populated with mock sensors.
 ///
 /// Called from `main.rs` when the `--mock` CLI flag is present.
@@ -189,16 +233,20 @@ pub fn mock_backends() -> DetectedBackends {
             peak_usage: 70.0,
             vram_total_mb: 24_576, // 24 GB
             phase: 0.0,
+            is_integrated: false,
         }),
         Box::new(MockGpuSensor {
             gpu_name: "Mock AMD RX 7900 XTX",
             peak_usage: 50.0,
             vram_total_mb: 20_480, // 20 GB
             phase: 10.0, // offset so it doesn't mirror GPU 0 exactly
+            is_integrated: false,
         }),
     ];
 
     let fan = Box::new(MockFanController) as Box<dyn FanController>;
 
-    DetectedBackends { cpu, gpus, fan }
+    let disks = Box::new(MockDiskSensor) as Box<dyn DiskSensor>;
+
+    DetectedBackends { cpu, gpus, fan, disks }
 }

@@ -121,13 +121,20 @@ impl GpuSensor for AppleGpuSensor {
         // Usage: best-effort via gpu_busy_percent (may be absent)
         let usage_percent = self.read_usage();
 
+        // Clock: not reliably exposed by the Asahi driver yet.
+        let clock_mhz: Option<u32> = None;
+
         // Temperature: from macsmc-hwmon with GPU label match
         let temp_celsius = self.read_temp();
+
+        // Apple Silicon GPUs are integrated (unified memory architecture).
+        let is_integrated = true;
 
         // VRAM: Apple Silicon uses unified memory — no separate VRAM concept.
         // The Asahi driver does not expose dedicated VRAM counters via sysfs.
         let vram_used_mb: Option<u32> = None;
         let vram_total_mb: Option<u32> = None;
+        let vram_type: Option<String> = None;
 
         // If the device directory itself is gone, that's a hard error (device removed/driver unloaded)
         if !self.device_path.exists() {
@@ -138,8 +145,11 @@ impl GpuSensor for AppleGpuSensor {
             name: self.cached_name.clone(),
             usage_percent,
             temp_celsius,
+            clock_mhz,
+            is_integrated,
             vram_used_mb,
             vram_total_mb,
+            vram_type,
         })
     }
 

@@ -98,9 +98,11 @@ fn is_gpu_hwmon(hwmon_dir: &Path) -> bool {
 impl SysfsFanController {
     /// Scan the system for all fan headers.
     ///
-    /// Searches two sysfs trees:
+    /// Searches these sysfs trees:
     ///  1. `/sys/class/hwmon/hwmon*` — motherboard super-I/O chips.
     ///  2. `/sys/class/drm/card*/device/hwmon/hwmon*` — GPU fan headers.
+    ///  3. `/sys/devices/platform/thinkpad_hwmon/hwmon/hwmon*` — thinkpad_acpi
+    ///     fans (ThinkPads that load the module with fan control enabled).
     pub fn probe() -> Self {
         let mut fans = Vec::new();
         let mut gpu_counter: u32 = 0;
@@ -136,6 +138,16 @@ impl SysfsFanController {
                         );
                     }
                 }
+            }
+        }
+
+        // --- 3. thinkpad_acpi fans (ThinkPad EC-exposed fan inputs) ---
+        let tp_hwmon = Path::new("/sys/devices/platform/thinkpad_hwmon/hwmon");
+        if let Ok(hwmons) = fs::read_dir(&tp_hwmon) {
+            for hwmon in hwmons.flatten() {
+                let hwmon_dir = hwmon.path();
+                let hwmon_name = read_hwmon_name(&hwmon_dir);
+                Self::scan_hwmon_dir(&hwmon_dir, &hwmon_name, &mut gpu_counter, &mut fans);
             }
         }
 

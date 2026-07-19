@@ -1,13 +1,15 @@
 // IPC command handlers for the Tauri frontend.
 //
-// Two commands are exposed:
+// Commands exposed:
 //   • `get_snapshot`  — on-demand poll of CPU / GPU / fan state.
+//   • `get_host_info` — static identity of the current device (hostname, distro, kernel).
 //   • `set_fan_speed` — delegate a fan duty-cycle write to the helper binary.
 //
 // A background polling loop (`start_polling_loop`) continuously pushes
 // `SystemSnapshot` events to the frontend at 1 Hz, so the UI can simply
 // listen for the "sysctrl://snapshot" event rather than polling.
 
+use crate::host;
 use crate::sensors::{self, CpuReading, SystemSnapshot};
 use std::sync::Mutex;
 use std::time::Duration;
@@ -68,10 +70,16 @@ fn collect_snapshot(backends: &sensors::DetectedBackends) -> SystemSnapshot {
         Vec::new()
     });
 
+    // Disks
+    let disks = backends.disks.read_all().unwrap_or_else(|e| {
+        eprintln!("[SysCtrl] disk read error: {:#}", e);
+        Vec::new()
+    });
+
     // RAM
     let ram = sensors::read_ram();
 
-    SystemSnapshot { cpu, gpus, fans, ram }
+    SystemSnapshot { cpu, gpus, fans, ram, disks }
 }
 
 // ---------------------------------------------------------------------------
@@ -83,14 +91,14 @@ fn collect_snapshot(backends: &sensors::DetectedBackends) -> SystemSnapshot {
 pub async fn get_snapshot(state: tauri::State<'_, AppState>) -> Result<SystemSnapshot, String> {
     let guard = state.backends.lock().map_err(|e| e.to_string())?;
     let snapshot = collect_snapshot(&guard);
-    eprintln!("[DEBUG] cpu={}% temp={:?} gpus={} gpu0_usage={:?} fans={}",
-        snapshot.cpu.usage_percent,
-        snapshot.cpu.temp_celsius,
-        snapshot.gpus.len(),
-        snapshot.gpus.first().map(|g| g.usage_percent),
-        snapshot.fans.len()
-    );
     Ok(snapshot)
+}
+
+/// Return static identity of the device the app is currently running on
+/// (hostname, distribution, kernel, architecture).  Read-only, never fails.
+#[tauri::command]
+pub async fn get_host_info() -> host::HostInfo {
+    host::read_host_info()
 }
 
 /// Set a fan's duty cycle (0-100 %) via the privileged helper binary.

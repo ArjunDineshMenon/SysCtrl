@@ -93,13 +93,92 @@ impl AmdGpuSensor {
         }
         None
     }
+
+    /// Read GPU usage (%) from the kernel `gpu_busy_percent` sysfs file.
+    /// Present on many amdgpu parts; returns None if absent/unreadable.
+    fn read_usage_via_sysfs(&self) -> Option<f32> {
+        Self::read_sysfs_string(&self.device_path.join("gpu_busy_percent"))
+            .and_then(|s| s.trim().parse::<f32>().ok())
+    }
+
+    /// Read the current graphics clock (MHz) from amdgpu sysfs.
+    /// Tries `pp_dpm_sclk` (the line marked with '*') first, then falls back to
+    /// the hwmon `freq1_input` file.  Returns None if neither is available.
+    fn read_clock_mhz(&self) -> Option<u32> {
+        // pp_dpm_sclk lists clock states; the active one is marked with '*'.
+        if let Some(s) = Self::read_sysfs_string(&self.device_path.join("pp_dpm_sclk")) {
+            for line in s.lines() {
+                if line.contains('*') {
+                    // Format: "0: 200Mhz *" or "1: 1200MHz"
+                    if let Some(colon) = line.find(':') {
+                        let rest = &line[colon + 1..];
+                        let digits: String =
+                            rest.chars().take_while(|c| c.is_ascii_digit()).collect();
+                        if let Ok(mhz) = digits.parse::<u32>() {
+                            return Some(mhz);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Fallback: hwmon freq1_input (kHz) on some APUs.
+        if let Some(hwmon) = &self.hwmon_path {
+            if let Some(s) = Self::read_sysfs_string(&hwmon.join("freq1_input")) {
+                if let Ok(khz) = s.trim().parse::<u64>() {
+                    return Some((khz / 1000) as u32);
+                }
+            }
+        }
+        None
+    }
+
+    /// Best-effort APU (integrated) detection.
+    ///
+    /// AMD APUs expose their GPU through the same `amdgpu` driver as discrete
+    /// cards, so we can't rely on the driver alone.  We instead match the PCI
+    /// device ID against a known list of integrated APU parts (Rembrandt,
+    /// Phoenix, Cezanne, Van Gogh, Strix Point, etc.).  Anything not on the
+    /// list is treated as discrete (false) — a safe default.
+    fn is_apu(device_path: &Path) -> bool {
+        let device_id = fs::read_to_string(device_path.join("device"))
+            .ok()
+            .map(|s| s.trim().to_string());
+        match device_id.as_deref() {
+            Some(id) => AMD_APU_DEVICE_IDS.iter().any(|d| d.eq_ignore_ascii_case(id)),
+            None => false,
+        }
+    }
 }
+
+/// PCI device IDs of well-known AMD integrated APU graphics (Radeon Graphics
+/// built into the CPU die).  Used only to flag GPUs as "integrated".
+#[cfg(target_os = "linux")]
+const AMD_APU_DEVICE_IDS: &[&str] = &[
+    // Rembrandt (Ryzen 6000, e.g. 680M)
+    "0x1681", "0x1682",
+    // Phoenix / Phoenix2 (Ryzen 7000/8000 mobile, e.g. 780M)
+    "0x15bf", "0x15c8", "0x15d8",
+    // Cezanne / Renoir / Lucienne (Ryzen 5000/4000)
+    "0x1638", "0x164c", "0x164e", "0x1636",
+    // Van Gogh (Steam Deck)
+    "0x163f",
+    // Strix Point (Ryzen AI 300, e.g. 890M)
+    "0x150e",
+];
 
 #[cfg(target_os = "linux")]
 impl GpuSensor for AmdGpuSensor {
     fn read(&self) -> Result<GpuReading> {
-        // Usage: read via radeontop (gpu_busy_percent is unreliable on some GPUs)
-        let usage_percent = Self::read_gpu_usage_radeontop();
+        // Usage: prefer the kernel gpu_busy_percent sysfs file (no extra tool
+        // needed), then fall back to radeontop.
+        let usage_percent = self
+            .read_usage_via_sysfs()
+            .or_else(Self::read_gpu_usage_radeontop);
+
+        // Clock: best-effort from amdgpu pp_dpm_sclk (last "*" marked line) or
+        // hwmon freq1_input.  Falls back to None if neither is available.
+        let clock_mhz = self.read_clock_mhz();
 
         // Temperature: read hwmon/temp1_input (millidegrees Celsius)
         let temp_celsius = self.hwmon_path.as_ref().and_then(|hwmon| {
@@ -116,6 +195,11 @@ impl GpuSensor for AmdGpuSensor {
             .and_then(|s| s.parse::<u64>().ok())
             .map(|v| (v / 1024 / 1024) as u32);
 
+        // Integrated detection via known APU device IDs.
+        let is_integrated = Self::is_apu(&self.device_path);
+
+        let vram_type: Option<String> = None;
+
         // If the device directory itself is gone, that's a hard error (device removed/driver unloaded)
         if !self.device_path.exists() {
             anyhow::bail!("AMD GPU device path vanished: {:?}", self.device_path);
@@ -125,8 +209,11 @@ impl GpuSensor for AmdGpuSensor {
             name: self.cached_name.clone(),
             usage_percent,
             temp_celsius,
+            clock_mhz,
+            is_integrated,
             vram_used_mb,
             vram_total_mb,
+            vram_type,
         })
     }
 
@@ -167,36 +254,24 @@ fn find_hwmon_dir(device_path: &Path) -> Option<PathBuf> {
 /// Priority: device/product_name -> parse device/uevent for PCI_ID -> fallback "AMD GPU (cardN)"
 fn get_device_name(device_path: &Path, card_name: &str) -> String {
     // Try product_name first (available on some newer kernels)
-    let product_name_path = device_path.join("product_name");
-    eprintln!("[DEBUG gpu_amd] get_device_name: trying {:?}", product_name_path);
-    if let Some(product_name) = AmdGpuSensor::read_sysfs_string(&product_name_path) {
-        eprintln!("[DEBUG gpu_amd] product_name = {:?}", product_name);
+    if let Some(product_name) = AmdGpuSensor::read_sysfs_string(&device_path.join("product_name")) {
         if !product_name.is_empty() {
-            eprintln!("[DEBUG gpu_amd] => returning product_name: {:?}", product_name);
             return product_name;
         }
-    } else {
-        eprintln!("[DEBUG gpu_amd] product_name not found or unreadable");
     }
 
     // Parse uevent for PCI_ID (format: PCI_ID=1002:XXXX)
-    let uevent_path = device_path.join("uevent");
-    eprintln!("[DEBUG gpu_amd] get_device_name: trying {:?}", uevent_path);
-    if let Some(uevent) = AmdGpuSensor::read_sysfs_string(&uevent_path) {
+    if let Some(uevent) = AmdGpuSensor::read_sysfs_string(&device_path.join("uevent")) {
         for line in uevent.lines() {
             if let Some(pci_id) = line.strip_prefix("PCI_ID=") {
                 // pci_id format: "1002:731f" (vendor:device)
-                let name = format!("AMD GPU ({})", pci_id);
-                eprintln!("[DEBUG gpu_amd] => returning PCI_ID name: {:?}", name);
-                return name;
+                return format!("AMD GPU ({})", pci_id);
             }
         }
     }
 
     // Fallback
-    let name = format!("AMD GPU ({})", card_name);
-    eprintln!("[DEBUG gpu_amd] => returning fallback name: {:?}", name);
-    name
+    format!("AMD GPU ({})", card_name)
 }
 
 // The struct only contains PathBuf, Option<PathBuf>, and String — all Send + Sync.

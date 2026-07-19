@@ -5,43 +5,80 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SysCtrl</title>
   <style>
-*{box-sizing:border-box;margin:0;padding:0}
-.app{display:flex;height:560px;border:0.5px solid var(--border);border-radius:12px;overflow:hidden;background:var(--surface-1);font-size:13px}
-.sidebar{width:180px;border-right:0.5px solid var(--border);display:flex;flex-direction:column;background:var(--surface-0);padding:12px 0}
-.sidebar-logo{padding:0 16px 12px;border-bottom:0.5px solid var(--border);margin-bottom:8px}
-.sidebar-logo p{font-size:15px;font-weight:500;color:var(--text-primary)}
-.sidebar-logo span{font-size:11px;color:var(--text-muted)}
-.nav-section{padding:4px 8px;margin-top:4px}
-.nav-section-label{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);padding:0 8px;margin-bottom:4px}
-.nav-item{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:6px;cursor:pointer;color:var(--text-secondary);transition:background .1s}
-.nav-item:hover{background:var(--surface-1)}
-.nav-item.active{background:var(--surface-2);color:var(--text-primary);border:0.5px solid var(--border)}
-.nav-item i{font-size:16px;width:18px}
-.nav-item span{font-size:13px}
-.nav-future{opacity:.45}
-.main{flex:1;display:flex;flex-direction:column;overflow:hidden}
-.topbar{padding:12px 20px;border-bottom:0.5px solid var(--border);display:flex;align-items:center;justify-content:space-between}
-.topbar-left p{font-size:15px;font-weight:500;color:var(--text-primary)}
-.topbar-left span{font-size:12px;color:var(--text-muted)}
-.status-pill{display:flex;align-items:center;gap:6px;background:var(--bg-success);border:0.5px solid var(--border-success);border-radius:20px;padding:4px 10px;font-size:12px;color:var(--text-success)}
-.dot{width:6px;height:6px;border-radius:50%;background:currentColor}
-.content{flex:1;overflow-y:auto;padding:16px 20px;display:flex;flex-direction:column;gap:14px}
-.stat-row{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
-.stat-card{background:var(--surface-2);border:0.5px solid var(--border);border-radius:8px;padding:12px}
-.stat-card .label{font-size:11px;color:var(--text-muted);margin-bottom:4px}
-.stat-card .value{font-size:20px;font-weight:500;color:var(--text-primary);line-height:1.2}
-.stat-card .sub{font-size:11px;color:var(--text-secondary);margin-top:2px}
-.bar-track{height:4px;background:var(--border-strong);border-radius:2px;margin-top:6px}
-.bar-fill{height:4px;border-radius:2px}
-.panels-row{display:grid;grid-template-columns:1fr;gap:14px;flex:1}
-.panel{background:var(--surface-2);border:0.5px solid var(--border);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:8px}
-.panel-header{display:flex;align-items:center;gap:6px}
-.panel-title{font-size:13px;font-weight:500;color:var(--text-primary);display:flex;align-items:center;gap:6px}
-.panel-title i{font-size:15px;color:var(--text-muted)}
-.chart-legend{display:flex;gap:14px;margin-left:auto;align-items:center}
-.chart-legend-item{display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text-secondary)}
-.chart-legend-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
-.chart-area{flex:1;min-height:140px;position:relative;border-radius:4px;overflow:hidden;background:var(--surface-1)}
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --surface-0: #1a1d23;
+      --surface-1: #21252d;
+      --surface-2: #2a2f3a;
+      --border: #3a4150;
+      --border-strong: #4a5263;
+      --text-primary: #e6e9ef;
+      --text-secondary: #aab2c0;
+      --text-muted: #6b7280;
+      --accent: #4a9eff;
+      --accent-gpu: #f5a623;
+      --accent-ram: #a855f7;
+      --accent-disk: #34d399;
+      --bg-success: rgba(52, 211, 153, 0.12);
+      --border-success: rgba(52, 211, 153, 0.4);
+      --text-success: #34d399;
+      --text-danger: #f87171;
+      --text-warning: #fbbf24;
+    }
+    .app { display: flex; height: 100vh; background: var(--surface-1); font-size: 13px; color: var(--text-primary); }
+    .sidebar { width: 190px; border-right: 0.5px solid var(--border); display: flex; flex-direction: column; background: var(--surface-0); padding: 14px 0; flex-shrink: 0; }
+    .sidebar-logo { padding: 0 16px 14px; border-bottom: 0.5px solid var(--border); margin-bottom: 10px; }
+    .sidebar-logo p { font-size: 16px; font-weight: 600; }
+    .sidebar-logo span { font-size: 11px; color: var(--text-muted); }
+    .nav-section { padding: 4px 8px; margin-top: 4px; }
+    .nav-section-label { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); padding: 0 8px; margin-bottom: 4px; }
+    .nav-item { display: flex; align-items: center; gap: 8px; padding: 8px; border-radius: 6px; cursor: pointer; color: var(--text-secondary); transition: background .1s; user-select: none; }
+    .nav-item:hover { background: var(--surface-1); }
+    .nav-item.active { background: var(--surface-2); color: var(--text-primary); border: 0.5px solid var(--border); }
+    .nav-item i { font-size: 16px; width: 18px; text-align: center; }
+    .nav-item span { font-size: 13px; }
+    .nav-future { opacity: .45; cursor: default; }
+    .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+    .topbar { padding: 12px 20px; border-bottom: 0.5px solid var(--border); display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+    .topbar-left p { font-size: 15px; font-weight: 500; }
+    .topbar-left span { font-size: 12px; color: var(--text-muted); }
+    .status-pill { display: flex; align-items: center; gap: 6px; background: var(--bg-success); border: 0.5px solid var(--border-success); border-radius: 20px; padding: 4px 10px; font-size: 12px; color: var(--text-success); }
+    .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+    .content { flex: 1; overflow-y: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 16px; }
+    .view { display: none; flex-direction: column; gap: 16px; }
+    .view.active { display: flex; }
+
+    /* Spec sections */
+    .section { background: var(--surface-2); border: 0.5px solid var(--border); border-radius: 10px; padding: 14px; }
+    .section-title { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 6px; margin-bottom: 10px; }
+    .section-title i { font-size: 15px; color: var(--text-muted); }
+    .badge { font-size: 10px; font-weight: 600; padding: 1px 7px; border-radius: 10px; background: rgba(74,158,255,.18); color: var(--accent); border: 0.5px solid rgba(74,158,255,.4); }
+    .badge.integrated { background: rgba(52,211,153,.16); color: var(--text-success); border-color: var(--border-success); }
+    .spec-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; }
+    .spec { background: var(--surface-1); border: 0.5px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+    .spec .label { font-size: 11px; color: var(--text-muted); margin-bottom: 3px; }
+    .spec .value { font-size: 15px; font-weight: 500; }
+    .spec .value.small { font-size: 13px; }
+    .spec .sub { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+    .bar-track { height: 4px; background: var(--border-strong); border-radius: 2px; margin-top: 7px; overflow: hidden; }
+    .bar-fill { height: 4px; border-radius: 2px; transition: width .4s ease; }
+    .gpu-card { border: 0.5px solid var(--border); border-radius: 8px; padding: 12px; margin-top: 10px; background: var(--surface-1); }
+    .gpu-card:first-of-type { margin-top: 0; }
+    .gpu-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .gpu-head .name { font-size: 14px; font-weight: 500; }
+
+    /* Graphs view */
+    .graph-toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .graph-tab { padding: 6px 14px; border-radius: 6px; cursor: pointer; background: var(--surface-2); border: 0.5px solid var(--border); color: var(--text-secondary); }
+    .graph-tab.active { background: var(--surface-1); color: var(--text-primary); border-color: var(--accent); }
+    .graph-panel { background: var(--surface-2); border: 0.5px solid var(--border); border-radius: 10px; padding: 14px; }
+    .graph-title { font-size: 13px; font-weight: 500; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+    .chart-area { width: 100%; height: 240px; position: relative; border-radius: 4px; overflow: hidden; background: var(--surface-1); }
+    .chart-legend { display: flex; gap: 16px; margin-top: 10px; flex-wrap: wrap; }
+    .chart-legend-item { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text-secondary); }
+    .chart-legend-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+    .sub-select { background: var(--surface-1); color: var(--text-primary); border: 0.5px solid var(--border); border-radius: 6px; padding: 5px 8px; font-size: 12px; }
+    .empty { color: var(--text-muted); font-size: 13px; padding: 20px; text-align: center; }
   </style>
 </head>
 <body>
@@ -53,21 +90,19 @@
       </div>
       <nav>
         <div class="nav-section">
-          <div class="nav-section-label">Monitoring</div>
-          <a class="nav-item active" href="#"><i>📊</i><span>Dashboard</span></a>
-          <a class="nav-item" href="#"><i>📈</i><span>History</span></a>
-          <a class="nav-item" href="#"><i>⚡</i><span>Power</span></a>
+          <div class="nav-section-label">Views</div>
+          <div class="nav-item active" data-view="overview"><i>📋</i><span>Overview</span></div>
+          <div class="nav-item" data-view="graphs"><i>📈</i><span>Graphs</span></div>
         </div>
         <div class="nav-section">
           <div class="nav-section-label">Control</div>
-          <a class="nav-item" href="#"><i>⚙️</i><span>Profiles</span></a>
-          <a class="nav-item nav-future" href="#"><i>🔧</i><span>Overclock</span></a>
+          <div class="nav-item nav-future"><i>🌡️</i><span>Fans</span></div>
+          <div class="nav-item nav-future"><i>⚙️</i><span>Profiles</span></div>
         </div>
         <div class="nav-section">
           <div class="nav-section-label">Settings</div>
-          <a class="nav-item" href="#"><i>⚙️</i><span>General</span></a>
-          <a class="nav-item" href="#"><i>🔔</i><span>Alerts</span></a>
-          <a class="nav-item" href="#"><i>🔄</i><span>Updates</span></a>
+          <div class="nav-item nav-future"><i>⚙️</i><span>General</span></div>
+          <div class="nav-item nav-future"><i>🔔</i><span>Alerts</span></div>
         </div>
       </nav>
     </aside>
@@ -75,8 +110,8 @@
     <main class="main">
       <header class="topbar">
         <div class="topbar-left">
-          <p>Dashboard</p>
-          <span>Real-time system monitoring</span>
+          <p id="view-title">System Overview</p>
+          <span id="view-sub">Real-time hardware specifications</span>
         </div>
         <div class="status-pill" id="status-pill">
           <span class="dot" id="status-dot"></span>
@@ -85,79 +120,136 @@
       </header>
 
       <div class="content">
-        <div class="stat-row">
-          <!-- CPU Usage Card -->
-          <div class="stat-card">
-            <div class="label">CPU Usage</div>
-            <div class="value" id="cpu-usage-val">—</div>
-            <div class="sub" id="cpu-sub">—</div>
-            <div class="bar-track"><div class="bar-fill" id="cpu-usage-bar" style="width:0%;background:#4a9eff"></div></div>
+        <!-- ============ OVERVIEW VIEW ============ -->
+        <div class="view active" id="view-overview">
+
+          <!-- Device identity -->
+          <div class="section">
+            <div class="section-title"><i>💻</i> This Device</div>
+            <div class="spec-grid">
+              <div class="spec">
+                <div class="label">Hostname</div>
+                <div class="value small" id="host-name-val">—</div>
+              </div>
+              <div class="spec">
+                <div class="label">Operating System</div>
+                <div class="value small" id="host-os-val">—</div>
+                <div class="sub" id="host-os-sub">—</div>
+              </div>
+              <div class="spec">
+                <div class="label">Kernel</div>
+                <div class="value small" id="host-kernel-val">—</div>
+              </div>
+              <div class="spec">
+                <div class="label">Architecture</div>
+                <div class="value small" id="host-arch-val">—</div>
+              </div>
+            </div>
           </div>
 
-          <!-- CPU Temp Card -->
-          <div class="stat-card">
-            <div class="label">CPU Temp</div>
-            <div class="value" id="cpu-temp-val">—</div>
-            <div class="sub">Package temperature</div>
-            <div class="bar-track"><div class="bar-fill" id="cpu-temp-bar" style="width:0%;background:#4a9eff"></div></div>
+          <!-- CPU -->
+          <div class="section">
+            <div class="section-title"><i>🧠</i> CPU</div>
+            <div class="spec-grid">
+              <div class="spec">
+                <div class="label">Usage</div>
+                <div class="value" id="cpu-usage-val">—</div>
+                <div class="bar-track"><div class="bar-fill" id="cpu-usage-bar" style="width:0%;background:var(--accent)"></div></div>
+              </div>
+              <div class="spec">
+                <div class="label">Clock Speed</div>
+                <div class="value" id="cpu-clock-val">—</div>
+                <div class="sub" id="cpu-cores-sub">—</div>
+              </div>
+              <div class="spec">
+                <div class="label">Temperature</div>
+                <div class="value" id="cpu-temp-val">—</div>
+                <div class="bar-track"><div class="bar-fill" id="cpu-temp-bar" style="width:0%;background:var(--accent)"></div></div>
+              </div>
+            </div>
           </div>
 
-          <!-- GPU Usage Card -->
-          <div class="stat-card">
-            <div class="label">GPU Usage</div>
-            <div class="value" id="gpu-usage-val">—</div>
-            <div class="sub" id="gpu-sub">—</div>
-            <div class="bar-track"><div class="bar-fill" id="gpu-usage-bar" style="width:0%;background:#f5a623"></div></div>
+          <!-- GPU(s) -->
+          <div class="section">
+            <div class="section-title"><i>🎮</i> GPU</div>
+            <div id="gpu-container"><div class="empty">No GPU detected</div></div>
           </div>
 
-          <!-- RAM Card -->
-          <div class="stat-card">
-            <div class="label">RAM</div>
-            <div class="value" id="ram-used-val">—</div>
-            <div class="sub" id="ram-sub">System memory</div>
-            <div class="bar-track"><div class="bar-fill" id="ram-used-bar" style="width:0%;background:#a855f7"></div></div>
+          <!-- RAM -->
+          <div class="section">
+            <div class="section-title"><i>💾</i> Memory (RAM)</div>
+            <div class="spec-grid">
+              <div class="spec">
+                <div class="label">Usage</div>
+                <div class="value" id="ram-used-val">—</div>
+                <div class="bar-track"><div class="bar-fill" id="ram-used-bar" style="width:0%;background:var(--accent-ram)"></div></div>
+                <div class="sub" id="ram-pct-sub">—</div>
+              </div>
+              <div class="spec">
+                <div class="label">Model</div>
+                <div class="value small" id="ram-model-val">—</div>
+                <div class="sub" id="ram-speed-sub">—</div>
+              </div>
+            </div>
           </div>
+
+      <!-- Fans -->
+      <div class="section">
+        <div class="section-title"><i>🌬️</i> Fans</div>
+        <div id="fan-container"><div class="empty">Fan telemetry not available on this device</div></div>
+      </div>
+
+          <!-- Storage -->
+          <div class="section">
+            <div class="section-title"><i>🗄️</i> Storage</div>
+            <div id="disk-container"><div class="empty">No disks detected</div></div>
+          </div>
+
         </div>
 
-        <div class="panels-row">
-          <!-- Chart Panel (full width) -->
-          <div class="panel">
-            <div class="panel-header">
-              <div class="panel-title">
-                <i>📈</i> Usage History
-              </div>
-              <div class="chart-legend">
-                <div class="chart-legend-item"><span class="chart-legend-dot" style="background:#4a9eff"></span>CPU</div>
-                <div class="chart-legend-item"><span class="chart-legend-dot" style="background:#f5a623"></span>GPU</div>
-                <div class="chart-legend-item"><span class="chart-legend-dot" style="background:#a855f7"></span>RAM</div>
-              </div>
-              <div style="display:flex;gap:4px;margin-left:12px">
-                <button class="nav-item" id="chart-tab-1m" data-range="1m" style="padding:2px 8px;font-size:11px">1m</button>
-                <button class="nav-item" id="chart-tab-5m" data-range="5m" style="padding:2px 8px;font-size:11px">5m</button>
-                <button class="nav-item active" id="chart-tab-1h" data-range="1h" style="padding:2px 8px;font-size:11px">1h</button>
-              </div>
+        <!-- ============ GRAPHS VIEW ============ -->
+        <div class="view" id="view-graphs">
+          <div class="graph-toolbar">
+            <div class="graph-tab active" data-graph="cpu">CPU</div>
+            <div class="graph-tab" data-graph="gpu">GPU</div>
+            <div class="graph-tab" data-graph="ram">RAM</div>
+            <div class="graph-tab" data-graph="disk">Disk</div>
+            <select class="sub-select" id="graph-sub-select" style="display:none"></select>
+            <div style="margin-left:auto;display:flex;gap:6px">
+              <div class="graph-tab range active" data-range="1m">1m</div>
+              <div class="graph-tab range" data-range="5m">5m</div>
+              <div class="graph-tab range" data-range="1h">1h</div>
             </div>
+          </div>
+
+          <div class="graph-panel">
+            <div class="graph-title" id="graph-title">CPU</div>
             <div class="chart-area">
-              <svg width="100%" height="100%" viewBox="0 0 600 160" preserveAspectRatio="none">
+              <svg width="100%" height="100%" viewBox="0 0 800 240" preserveAspectRatio="none" id="graph-svg">
                 <defs>
-                  <linearGradient id="cpuGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stop-color="#4a9eff" stop-opacity="0.3"/>
-                    <stop offset="100%" stop-color="#4a9eff" stop-opacity="0"/>
+                  <linearGradient id="gCpu" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.35"/>
+                    <stop offset="100%" stop-color="var(--accent)" stop-opacity="0"/>
                   </linearGradient>
-                  <linearGradient id="gpuGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stop-color="#f5a623" stop-opacity="0.3"/>
-                    <stop offset="100%" stop-color="#f5a623" stop-opacity="0"/>
+                  <linearGradient id="gGpu" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="var(--accent-gpu)" stop-opacity="0.35"/>
+                    <stop offset="100%" stop-color="var(--accent-gpu)" stop-opacity="0"/>
                   </linearGradient>
-                  <linearGradient id="ramGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stop-color="#a855f7" stop-opacity="0.3"/>
-                    <stop offset="100%" stop-color="#a855f7" stop-opacity="0"/>
+                  <linearGradient id="gRam" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="var(--accent-ram)" stop-opacity="0.35"/>
+                    <stop offset="100%" stop-color="var(--accent-ram)" stop-opacity="0"/>
+                  </linearGradient>
+                  <linearGradient id="gDisk" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="var(--accent-disk)" stop-opacity="0.35"/>
+                    <stop offset="100%" stop-color="var(--accent-disk)" stop-opacity="0"/>
                   </linearGradient>
                 </defs>
-                <polyline id="chart-cpu-polyline" fill="url(#cpuGrad)" stroke="#4a9eff" stroke-width="1.5" points="0,160 600,160"/>
-                <polyline id="chart-gpu-polyline" fill="url(#gpuGrad)" stroke="#f5a623" stroke-width="1.5" points="0,160 600,160"/>
-                <polyline id="chart-ram-polyline" fill="url(#ramGrad)" stroke="#a855f7" stroke-width="1.5" points="0,160 600,160"/>
+                <polyline id="graph-poly-0" fill="none" stroke-width="1.5" points=""/>
+                <polyline id="graph-poly-1" fill="none" stroke-width="1.5" points=""/>
+                <polyline id="graph-poly-2" fill="none" stroke-width="1.5" points=""/>
               </svg>
             </div>
+            <div class="chart-legend" id="graph-legend"></div>
           </div>
         </div>
       </div>
@@ -165,242 +257,416 @@
   </div>
 
   <script>
-    // ============================================================================
-    // SysCtrl Dashboard — Tauri v2 IPC wiring
-    // ============================================================================
+  (function () {
+    'use strict';
 
-    (function () {
-      'use strict';
+    // ---------------------------------------------------------------------
+    // Helpers
+    // ---------------------------------------------------------------------
+    function fmt(v, d, suffix) {
+      if (v == null) return '—';
+      return Number(v).toFixed(d == null ? 0 : d) + (suffix || '');
+    }
+    function setText(el, t) { if (el && el.textContent !== t) el.textContent = t; }
+    function setStyle(el, p, v) { if (el && el.style[p] !== v) el.style[p] = v; }
+    function setAttr(el, a, v) { if (el && el.getAttribute(a) !== v) el.setAttribute(a, v); }
+    function gb(bytes) { return (bytes / 1024 / 1024 / 1024); }
+    function pctOf(part, whole) { return whole > 0 ? (part / whole * 100) : 0; }
 
-      // -----------------------------------------------------------------------
-      // Helpers
-      // -----------------------------------------------------------------------
+    function waitForTauri(cb, attempts) {
+      attempts = attempts === undefined ? 30 : attempts;
+      if (window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.event) {
+        cb(window.__TAURI__);
+      } else if (attempts > 0) {
+        setTimeout(function () { waitForTauri(cb, attempts - 1); }, 100);
+      } else {
+        setText(els.statusText, 'Bridge unavailable');
+      }
+    }
 
-      function fmt(val, decimals, suffix) {
-        if (val == null) return '\u2014';
-        return Number(val).toFixed(decimals) + (suffix || '');
+    // ---------------------------------------------------------------------
+    // Chart history (per-metric buffers)
+    // ---------------------------------------------------------------------
+    var GW = 800, GH = 240;
+    var HISTORY_SECONDS = { '1m': 60, '5m': 300, '1h': 3600 };
+    var MAX_POINTS = 3600; // 1h at 1Hz
+    var graphRange = '1m';
+    var history = {}; // key -> [numbers]
+
+    function pushHist(key, val) {
+      if (!history[key]) history[key] = [];
+      history[key].push(val == null ? 0 : val);
+      if (history[key].length > MAX_POINTS) history[key].shift();
+    }
+    function seriesForRange(arr) {
+      var want = HISTORY_SECONDS[graphRange];
+      if (arr.length <= want) return arr.slice();
+      return arr.slice(arr.length - want);
+    }
+    function points(series, maxVal) {
+      if (!series.length) return '0,' + GH + ' ' + GW + ',' + GH;
+      var step = GW / Math.max(1, series.length - 1);
+      var out = '';
+      for (var i = 0; i < series.length; i++) {
+        var x = i * step;
+        var norm = maxVal > 0 ? series[i] / maxVal : 0;
+        var y = GH - norm * (GH - 4) - 2;
+        out += (i ? ' ' : '') + x.toFixed(1) + ',' + y.toFixed(1);
+      }
+      return out;
+    }
+
+    // ---------------------------------------------------------------------
+    // DOM
+    // ---------------------------------------------------------------------
+    var els = {
+      cpuUsageVal: document.getElementById('cpu-usage-val'),
+      cpuUsageBar: document.getElementById('cpu-usage-bar'),
+      cpuClockVal: document.getElementById('cpu-clock-val'),
+      cpuCoresSub: document.getElementById('cpu-cores-sub'),
+      cpuTempVal: document.getElementById('cpu-temp-val'),
+      cpuTempBar: document.getElementById('cpu-temp-bar'),
+      gpuContainer: document.getElementById('gpu-container'),
+      ramUsedVal: document.getElementById('ram-used-val'),
+      ramUsedBar: document.getElementById('ram-used-bar'),
+      ramPctSub: document.getElementById('ram-pct-sub'),
+      ramModelVal: document.getElementById('ram-model-val'),
+      ramSpeedSub: document.getElementById('ram-speed-sub'),
+      fanContainer: document.getElementById('fan-container'),
+      diskContainer: document.getElementById('disk-container'),
+      hostNameVal: document.getElementById('host-name-val'),
+      hostOsVal: document.getElementById('host-os-val'),
+      hostOsSub: document.getElementById('host-os-sub'),
+      hostKernelVal: document.getElementById('host-kernel-val'),
+      hostArchVal: document.getElementById('host-arch-val'),
+      statusDot: document.getElementById('status-dot'),
+      statusText: document.getElementById('status-text'),
+    };
+
+    // ---------------------------------------------------------------------
+    // Overview rendering
+    // ---------------------------------------------------------------------
+    function applyOverview(snap) {
+      var cpu = snap.cpu || {};
+      var gpus = snap.gpus || [];
+      var ram = snap.ram || {};
+      var fans = snap.fans || [];
+      var disks = snap.disks || [];
+
+      // CPU
+      var cpuPct = cpu.usage_percent != null ? cpu.usage_percent : 0;
+      setText(els.cpuUsageVal, fmt(cpuPct, 0, '%'));
+      setStyle(els.cpuUsageBar, 'width', cpuPct.toFixed(1) + '%');
+      setText(els.cpuClockVal, cpu.freq_mhz != null ? (cpu.freq_mhz / 1000).toFixed(2) + ' GHz' : '—');
+      var coreParts = [];
+      if (cpu.core_count != null && cpu.core_count > 0) coreParts.push(cpu.core_count + ' cores');
+      setText(els.cpuCoresSub, coreParts.length ? coreParts.join(' · ') : '—');
+      var t = cpu.temp_celsius;
+      setText(els.cpuTempVal, t != null ? fmt(t, 0, '°C') : '—');
+      setStyle(els.cpuTempBar, 'width', t != null ? Math.min(t, 100).toFixed(1) + '%' : '0%');
+      if (els.cpuTempVal) {
+        els.cpuTempVal.style.color = t >= 85 ? 'var(--text-danger)' : t >= 70 ? 'var(--text-warning)' : '';
       }
 
-      function setText(el, text) {
-        if (el && el.textContent !== text) el.textContent = text;
-      }
-      function setStyle(el, prop, val) {
-        if (el && el.style[prop] !== val) el.style[prop] = val;
-      }
-      function setAttr(el, attr, val) {
-        if (el && el.getAttribute(attr) !== val) el.setAttribute(attr, val);
-      }
-
-      function waitForTauri(cb, attempts) {
-        attempts = attempts === undefined ? 20 : attempts;
-        if (window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.event) {
-          cb(window.__TAURI__);
-        } else if (attempts > 0) {
-          setTimeout(function() { waitForTauri(cb, attempts - 1); }, 100);
-        } else {
-          console.warn('[SysCtrl] Tauri bridge not available after 2s — static preview mode.');
-          setText(els.statusText, 'Bridge unavailable');
-        }
-      }
-
-      // -----------------------------------------------------------------------
-      // Chart history state
-      // -----------------------------------------------------------------------
-      var CHART_WIDTH  = 600;
-      var CHART_HEIGHT = 160;
-      var chartHistory = { cpu: [], gpu: [], ram: [] };
-      var MAX_HISTORY = 60;
-
-      function pushHistory(arr, val) {
-        arr.push(val == null ? 0 : val);
-        if (arr.length > MAX_HISTORY) arr.shift();
-      }
-
-      function historyToPoints(history, width, height) {
-        if (!history.length) return '0,' + height + ' ' + width + ',' + height;
-        var stepX = width / Math.max(1, history.length - 1);
-        var pts = '';
-        for (var i = 0; i < history.length; i++) {
-          var x = i * stepX;
-          var y = height - (history[i] / 100) * height;
-          if (i > 0) pts += ' ';
-          pts += x.toFixed(1) + ',' + y.toFixed(1);
-        }
-        return pts;
-      }
-
-      // -----------------------------------------------------------------------
-      // DOM references
-      // -----------------------------------------------------------------------
-      var els = {
-        cpuUsageVal:      document.getElementById('cpu-usage-val'),
-        cpuUsageBar:      document.getElementById('cpu-usage-bar'),
-        cpuTempVal:       document.getElementById('cpu-temp-val'),
-        cpuTempBar:       document.getElementById('cpu-temp-bar'),
-        cpuSub:           document.getElementById('cpu-sub'),
-        gpuUsageVal:      document.getElementById('gpu-usage-val'),
-        gpuUsageBar:      document.getElementById('gpu-usage-bar'),
-        gpuSub:           document.getElementById('gpu-sub'),
-        ramUsedVal:       document.getElementById('ram-used-val'),
-        ramUsedBar:       document.getElementById('ram-used-bar'),
-        ramSub:           document.getElementById('ram-sub'),
-        chartCpuPolyline: document.getElementById('chart-cpu-polyline'),
-        chartGpuPolyline: document.getElementById('chart-gpu-polyline'),
-        chartRamPolyline: document.getElementById('chart-ram-polyline'),
-        chartTabs:        document.querySelectorAll('#chart-tab-1m, #chart-tab-5m, #chart-tab-1h'),
-        statusDot:        document.getElementById('status-dot'),
-        statusText:       document.getElementById('status-text'),
-      };
-
-      // -----------------------------------------------------------------------
-      // Snapshot rendering
-      // -----------------------------------------------------------------------
-
-      function applySnapshot(snap) {
-        console.log('[applySnapshot] received:', snap);
-
-        var cpu  = snap.cpu  || {};
-        var gpus = snap.gpus || [];
-        var ram  = snap.ram  || {};
-
-        // -- CPU usage --
-        var cpuPct = cpu.usage_percent != null ? cpu.usage_percent : 0;
-        setText(els.cpuUsageVal, fmt(cpuPct, 0, '%'));
-        setStyle(els.cpuUsageBar, 'width', cpuPct.toFixed(1) + '%');
-
-        // -- CPU subtitle (cores · freq) --
-        if (els.cpuSub) {
-          var parts = [];
-          if (cpu.core_count != null && cpu.core_count > 0) {
-            parts.push(cpu.core_count + ' cores');
-          }
-          if (cpu.freq_mhz != null) {
-            parts.push((cpu.freq_mhz / 1000).toFixed(1) + ' GHz');
-          }
-          setText(els.cpuSub, parts.length ? parts.join(' \u00b7 ') : '\u2014');
-        }
-
-        // -- CPU temp --
-        var temp = cpu.temp_celsius;
-        setText(els.cpuTempVal, temp != null ? fmt(temp, 0, '\u00b0C') : '\u2014');
-        setStyle(els.cpuTempBar, 'width', temp != null ? Math.min(temp, 100).toFixed(1) + '%' : '0%');
-        if (els.cpuTempVal) {
-          els.cpuTempVal.style.color =
-            temp >= 85 ? 'var(--text-danger)'
-            : temp >= 70 ? 'var(--text-warning)'
-            : '';
-        }
-
-        // -- GPU --
-        var gpu = gpus.length > 0 ? gpus[0] : null;
-        var gpuPct = gpu && gpu.usage_percent != null ? gpu.usage_percent : 0;
-        setText(els.gpuUsageVal, gpu ? fmt(gpuPct, 0, '%') : '\u2014');
-        setStyle(els.gpuUsageBar, 'width', gpu ? gpuPct.toFixed(1) + '%' : '0%');
-
-        // -- GPU name + VRAM subtitle --
-        if (els.gpuSub) {
-          if (gpu) {
-            var gpuSubText = gpu.name || 'GPU';
-            if (gpu.vram_total_mb != null) {
-              gpuSubText += ' \u00b7 ' + (gpu.vram_total_mb / 1024).toFixed(1) + ' GB VRAM';
-            }
-            setText(els.gpuSub, gpuSubText);
+      // GPU(s)
+      if (gpus.length) {
+        els.gpuContainer.innerHTML = '';
+        gpus.forEach(function (g, idx) {
+          var card = document.createElement('div');
+          card.className = 'gpu-card';
+          var head = document.createElement('div');
+          head.className = 'gpu-head';
+          var name = document.createElement('span');
+          name.className = 'name';
+          name.textContent = g.name || ('GPU ' + (idx + 1));
+          head.appendChild(name);
+          if (g.is_integrated) {
+            var b = document.createElement('span');
+            b.className = 'badge integrated';
+            b.textContent = 'Integrated';
+            head.appendChild(b);
           } else {
-            setText(els.gpuSub, 'No GPU detected');
+            var b2 = document.createElement('span');
+            b2.className = 'badge';
+            b2.textContent = 'Discrete';
+            head.appendChild(b2);
           }
-        }
+          card.appendChild(head);
 
-        // -- RAM --
-        var ramPct = ram.percent != null ? ram.percent : 0;
-        if (els.ramUsedVal) {
-          if (ram.total_mb != null && ram.total_mb > 0) {
-            var usedGB = (ram.used_mb / 1024).toFixed(1);
-            var totalGB = (ram.total_mb / 1024).toFixed(1);
-            setText(els.ramUsedVal, usedGB + ' / ' + totalGB + ' GB');
-          } else {
-            setText(els.ramUsedVal, '\u2014');
-          }
-        }
-        setStyle(els.ramUsedBar, 'width', ramPct.toFixed(1) + '%');
-        if (els.ramSub) {
-          setText(els.ramSub, ramPct.toFixed(0) + '% used');
-        }
-
-        // -- Chart history --
-        pushHistory(chartHistory.cpu, cpuPct);
-        pushHistory(chartHistory.gpu, gpuPct);
-        pushHistory(chartHistory.ram, ramPct);
-        renderChart();
-      }
-
-      // -----------------------------------------------------------------------
-      // Chart rendering
-      // -----------------------------------------------------------------------
-      function renderChart() {
-        setAttr(els.chartCpuPolyline, 'points', historyToPoints(chartHistory.cpu, CHART_WIDTH, CHART_HEIGHT));
-        setAttr(els.chartGpuPolyline, 'points', historyToPoints(chartHistory.gpu, CHART_WIDTH, CHART_HEIGHT));
-        setAttr(els.chartRamPolyline, 'points', historyToPoints(chartHistory.ram, CHART_WIDTH, CHART_HEIGHT));
-      }
-
-      // -----------------------------------------------------------------------
-      // Chart tab switching
-      // -----------------------------------------------------------------------
-      els.chartTabs.forEach(function (tab) {
-        tab.addEventListener('click', function () {
-          els.chartTabs.forEach(function (t) { t.classList.toggle('active', t === tab); });
+          var grid = document.createElement('div');
+          grid.className = 'spec-grid';
+          grid.appendChild(spec('Usage', g.usage_percent != null ? fmt(g.usage_percent, 0, '%') : '—',
+            null, g.usage_percent != null ? pctBar(g.usage_percent, 'var(--accent-gpu)') : ''));
+          grid.appendChild(spec('Clock', g.clock_mhz != null ? (g.clock_mhz / 1000).toFixed(2) + ' GHz' : '—'));
+          grid.appendChild(spec('Temperature', g.temp_celsius != null ? fmt(g.temp_celsius, 0, '°C') : '—',
+            g.temp_celsius != null && g.temp_celsius >= 85 ? 'var(--text-danger)' : ''));
+          var vramSub = '';
+          if (g.vram_total_mb != null) vramSub = (g.vram_total_mb / 1024).toFixed(1) + ' GB' + (g.vram_type ? ' ' + g.vram_type : '');
+          grid.appendChild(spec('VRAM', g.vram_used_mb != null && g.vram_total_mb != null
+            ? (g.vram_used_mb / 1024).toFixed(1) + ' / ' + (g.vram_total_mb / 1024).toFixed(1) + ' GB' : '—',
+            vramSub, g.vram_total_mb ? pctBar(pctOf(g.vram_used_mb || 0, g.vram_total_mb), 'var(--accent-gpu)') : ''));
+          card.appendChild(grid);
+          els.gpuContainer.appendChild(card);
         });
+      } else {
+        els.gpuContainer.innerHTML = '<div class="empty">No GPU detected</div>';
+      }
+
+      // RAM
+      var ramPct = ram.percent != null ? ram.percent : 0;
+      if (ram.total_mb != null && ram.total_mb > 0) {
+        setText(els.ramUsedVal, gb(ram.used_mb * 1024 * 1024).toFixed(1) + ' / ' + gb(ram.total_mb * 1024 * 1024).toFixed(1) + ' GB');
+      } else {
+        setText(els.ramUsedVal, '—');
+      }
+      setStyle(els.ramUsedBar, 'width', ramPct.toFixed(1) + '%');
+      setText(els.ramPctSub, ramPct.toFixed(0) + '% used');
+      setText(els.ramModelVal, ram.model != null ? ram.model : '—');
+      setText(els.ramSpeedSub, ram.speed_mhz != null ? ram.speed_mhz + ' MHz' : '—');
+
+      // Fans (read-only)
+      if (fans.length) {
+        els.fanContainer.innerHTML = '';
+        var fg = document.createElement('div');
+        fg.className = 'spec-grid';
+        fans.forEach(function (f) {
+          var parts = [];
+          if (f.rpm != null) parts.push(f.rpm + ' RPM');
+          if (f.percent != null) parts.push(f.percent + '%');
+          if (!f.writable) parts.push('(read-only)');
+          fg.appendChild(spec(f.label || 'Fan', f.rpm != null ? f.rpm + ' RPM' : '—',
+            parts.join(' · '), f.percent != null ? pctBar(f.percent, 'var(--accent)') : ''));
+        });
+        els.fanContainer.appendChild(fg);
+      } else {
+        els.fanContainer.innerHTML = '<div class="empty">Fan telemetry not available on this device</div>';
+      }
+
+      // Disks
+      if (disks.length) {
+        els.diskContainer.innerHTML = '';
+        var dg = document.createElement('div');
+        dg.className = 'spec-grid';
+        disks.forEach(function (d) {
+          var usedGb = gb(d.used_bytes), totalGb = gb(d.total_bytes);
+          var pct = pctOf(d.used_bytes, d.total_bytes);
+          var sub = (d.model ? d.model + ' · ' : '') + (d.mount ? d.mount : '');
+          dg.appendChild(spec(d.device || 'Disk', usedGb.toFixed(0) + ' / ' + totalGb.toFixed(0) + ' GB',
+            sub, pctBar(pct, 'var(--accent-disk)')));
+        });
+        els.diskContainer.appendChild(dg);
+      } else {
+        els.diskContainer.innerHTML = '<div class="empty">No disks detected</div>';
+      }
+    }
+
+    function spec(label, value, sub, barHtml) {
+      var d = document.createElement('div');
+      d.className = 'spec';
+      var l = document.createElement('div'); l.className = 'label'; l.textContent = label;
+      var v = document.createElement('div'); v.className = 'value'; v.textContent = value;
+      d.appendChild(l); d.appendChild(v);
+      if (sub) { var s = document.createElement('div'); s.className = 'sub'; s.textContent = sub; d.appendChild(s); }
+      if (barHtml) { var bt = document.createElement('div'); bt.className = 'bar-track'; bt.innerHTML = barHtml; d.appendChild(bt); }
+      return d;
+    }
+    function pctBar(pct, color) {
+      return '<div class="bar-fill" style="width:' + Math.max(0, Math.min(100, pct)).toFixed(1) + '%;background:' + color + '"></div>';
+    }
+
+    // ---------------------------------------------------------------------
+    // Graph view
+    // ---------------------------------------------------------------------
+    var graphKind = 'cpu';
+    var graphSubIndex = 0;
+    var GRAPH_DEFS = {
+      cpu: { title: 'CPU', series: [
+        { key: 'cpu_usage', label: 'Usage %', color: 'var(--accent)', grad: 'gCpu', max: 100 },
+        { key: 'cpu_temp', label: 'Temp °C', color: '#f87171', grad: null, max: 100 },
+        { key: 'cpu_clock', label: 'Clock GHz', color: '#34d399', grad: null, max: 5 },
+      ]},
+      gpu: { title: 'GPU', series: [
+        { key: 'gpu_usage', label: 'Usage %', color: 'var(--accent-gpu)', grad: 'gGpu', max: 100 },
+        { key: 'gpu_temp', label: 'Temp °C', color: '#f87171', grad: null, max: 100 },
+        { key: 'gpu_clock', label: 'Clock GHz', color: '#34d399', grad: null, max: 3 },
+      ]},
+      ram: { title: 'RAM', series: [
+        { key: 'ram_pct', label: 'Usage %', color: 'var(--accent-ram)', grad: 'gRam', max: 100 },
+      ]},
+      disk: { title: 'Disk', series: [
+        { key: 'disk_pct', label: 'Used %', color: 'var(--accent-disk)', grad: 'gDisk', max: 100 },
+      ]},
+    };
+
+    function renderGraph() {
+      var def = GRAPH_DEFS[graphKind];
+      setText(document.getElementById('graph-title'), def.title);
+      // sub-select for gpu/disk multi-instance
+      var subSel = document.getElementById('graph-sub-select');
+      var needSub = (graphKind === 'gpu' && lastGpus.length > 1) || (graphKind === 'disk' && lastDisks.length > 1);
+      if (needSub) {
+        subSel.style.display = '';
+        subSel.innerHTML = '';
+        var items = graphKind === 'gpu' ? lastGpus : lastDisks;
+        items.forEach(function (it, i) {
+          var o = document.createElement('option');
+          o.value = i;
+          o.textContent = (graphKind === 'gpu' ? (it.name || ('GPU ' + (i + 1))) : (it.device || ('Disk ' + (i + 1))));
+          subSel.appendChild(o);
+        });
+        subSel.value = graphSubIndex;
+      } else {
+        subSel.style.display = 'none';
+        graphSubIndex = 0;
+      }
+
+      // build series keys based on sub index
+      var keys = def.series.map(function (s) {
+        return s.key + (graphKind === 'gpu' || graphKind === 'disk' ? '_' + graphSubIndex : '');
       });
 
-      // -----------------------------------------------------------------------
-      // Status indicator
-      // -----------------------------------------------------------------------
-      function setConnected(ok) {
-        if (els.statusDot)  els.statusDot.style.background = ok ? '' : 'var(--text-danger)';
-        if (els.statusText) setText(els.statusText, ok ? 'All sensors active' : 'Sensors disconnected');
+      var polys = [document.getElementById('graph-poly-0'), document.getElementById('graph-poly-1'), document.getElementById('graph-poly-2')];
+      var legend = document.getElementById('graph-legend');
+      legend.innerHTML = '';
+      def.series.forEach(function (s, i) {
+        var k = keys[i];
+        var arr = seriesForRange(history[k] || []);
+        var maxV = s.max;
+        setAttr(polys[i], 'points', points(arr, maxV));
+        setAttr(polys[i], 'stroke', s.color);
+        setAttr(polys[i], 'fill', s.grad ? 'url(#' + s.grad + ')' : 'none');
+        // legend
+        var li = document.createElement('div');
+        li.className = 'chart-legend-item';
+        li.innerHTML = '<span class="chart-legend-dot" style="background:' + s.color + '"></span>' + s.label;
+        legend.appendChild(li);
+      });
+    }
+
+    // ---------------------------------------------------------------------
+    // Snapshot apply (feeds both views + history)
+    // ---------------------------------------------------------------------
+    var lastGpus = [], lastDisks = [];
+    function applySnapshot(snap) {
+      applyOverview(snap);
+
+      var cpu = snap.cpu || {};
+      pushHist('cpu_usage', cpu.usage_percent);
+      pushHist('cpu_temp', cpu.temp_celsius);
+      pushHist('cpu_clock', cpu.freq_mhz != null ? cpu.freq_mhz / 1000 : 0);
+
+      lastGpus = snap.gpus || [];
+      lastGpus.forEach(function (g, i) {
+        pushHist('gpu_usage_' + i, g.usage_percent);
+        pushHist('gpu_temp_' + i, g.temp_celsius);
+        pushHist('gpu_clock_' + i, g.clock_mhz != null ? g.clock_mhz / 1000 : 0);
+      });
+
+      var ram = snap.ram || {};
+      pushHist('ram_pct', ram.percent);
+
+      lastDisks = snap.disks || [];
+      lastDisks.forEach(function (d, i) {
+        pushHist('disk_pct_' + i, pctOf(d.used_bytes, d.total_bytes));
+      });
+
+      if (document.getElementById('view-graphs').classList.contains('active')) {
+        renderGraph();
       }
+    }
 
-      // -----------------------------------------------------------------------
-      // Boot: initial snapshot + live event listener
-      // -----------------------------------------------------------------------
-      function boot(tauri) {
-        var invoke = tauri.core.invoke;
-        var tauriListen = tauri.event.listen;
+    // ---------------------------------------------------------------------
+    // Navigation
+    // ---------------------------------------------------------------------
+    function setView(v) {
+      document.querySelectorAll('.nav-item[data-view]').forEach(function (n) {
+        n.classList.toggle('active', n.getAttribute('data-view') === v);
+      });
+      document.getElementById('view-overview').classList.toggle('active', v === 'overview');
+      document.getElementById('view-graphs').classList.toggle('active', v === 'graphs');
+      setText(document.getElementById('view-title'), v === 'overview' ? 'System Overview' : 'Graphs');
+      setText(document.getElementById('view-sub'), v === 'overview' ? 'Real-time hardware specifications' : 'Historical trends');
+      if (v === 'graphs') renderGraph();
+    }
+    document.querySelectorAll('.nav-item[data-view]').forEach(function (n) {
+      n.addEventListener('click', function () { setView(n.getAttribute('data-view')); });
+    });
+    document.querySelectorAll('.graph-tab[data-graph]').forEach(function (t) {
+      t.addEventListener('click', function () {
+        document.querySelectorAll('.graph-tab[data-graph]').forEach(function (x) { x.classList.remove('active'); });
+        t.classList.add('active');
+        graphKind = t.getAttribute('data-graph');
+        graphSubIndex = 0;
+        renderGraph();
+      });
+    });
+    document.querySelectorAll('.graph-tab.range').forEach(function (t) {
+      t.addEventListener('click', function () {
+        document.querySelectorAll('.graph-tab.range').forEach(function (x) { x.classList.remove('active'); });
+        t.classList.add('active');
+        graphRange = t.getAttribute('data-range');
+        renderGraph();
+      });
+    });
+    document.getElementById('graph-sub-select').addEventListener('change', function (e) {
+      graphSubIndex = parseInt(e.target.value, 10) || 0;
+      renderGraph();
+    });
 
-        console.log('[SysCtrl] Tauri bridge connected, booting...');
+    // ---------------------------------------------------------------------
+    // Status
+    // ---------------------------------------------------------------------
+    function setConnected(ok) {
+      if (els.statusDot) els.statusDot.style.background = ok ? '' : 'var(--text-danger)';
+      if (els.statusText) setText(els.statusText, ok ? 'All sensors active' : 'Sensors disconnected');
+    }
 
-        // 1. Fetch initial snapshot
-        (async function () {
-          try {
-            var snap = await invoke('get_snapshot');
-            applySnapshot(snap);
-            setConnected(true);
-          } catch (err) {
-            console.error('[SysCtrl] get_snapshot failed:', err);
-            setConnected(false);
-          }
-        })();
+    // ---------------------------------------------------------------------
+    // Boot
+    // ---------------------------------------------------------------------
+    function applyHostInfo(info) {
+      if (!info) return;
+      setText(els.hostNameVal, info.hostname || '—');
+      setText(els.hostOsVal, info.distro || '—');
+      setText(els.hostOsSub, info.distro_version || 'Linux');
+      setText(els.hostKernelVal, info.kernel || '—');
+      setText(els.hostArchVal, info.arch || '—');
+    }
 
-        // 2. Listen for live "snapshot" events pushed by the backend at ~1 Hz
-        (async function () {
-          try {
-            await tauriListen('sysctrl://snapshot', function (event) {
-              try {
-                applySnapshot(event.payload);
-                setConnected(true);
-              } catch (err) {
-                console.error('[SysCtrl] error applying snapshot event:', err);
-              }
-            });
-            console.log('[SysCtrl] Listening for sysctrl://snapshot events');
-          } catch (err) {
-            console.error('[SysCtrl] failed to register snapshot listener:', err);
-          }
-        })();
-      }
+    function boot(tauri) {
+      var invoke = tauri.core.invoke;
+      (async function () {
+        try {
+          var snap = await invoke('get_snapshot');
+          applySnapshot(snap);
+          setConnected(true);
+        } catch (err) {
+          console.error('[SysCtrl] get_snapshot failed:', err);
+          setConnected(false);
+        }
+      })();
+      (async function () {
+        try {
+          var info = await invoke('get_host_info');
+          applyHostInfo(info);
+        } catch (err) {
+          console.error('[SysCtrl] get_host_info failed:', err);
+        }
+      })();
+      (async function () {
+        try {
+          await tauri.event.listen('sysctrl://snapshot', function (event) {
+            try { applySnapshot(event.payload); setConnected(true); }
+            catch (err) { console.error('[SysCtrl] snapshot apply error:', err); }
+          });
+        } catch (err) {
+          console.error('[SysCtrl] listen failed:', err);
+        }
+      })();
+    }
 
-      // Start by waiting for Tauri bridge
-      waitForTauri(boot);
-    })();
+    waitForTauri(boot);
+  })();
   </script>
 </body>
 </html>

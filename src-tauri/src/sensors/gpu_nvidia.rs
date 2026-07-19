@@ -90,12 +90,27 @@ impl GpuSensor for NvidiaGpuSensor {
             Err(_) => (None, None),
         };
 
+        // Graphics clock (MHz) — degrade to None on failure.
+        let clock_mhz = device
+            .clock_info(nvml_wrapper::enum_wrappers::device::Clock::Graphics)
+            .ok()
+            .map(|c| c as u32);
+
+        // NVIDIA appearances in this app are always discrete GPUs.
+        let is_integrated = false;
+
+        // VRAM type (e.g. "GDDR6") isn't trivially exposed via NVML; leave None.
+        let vram_type: Option<String> = None;
+
         Ok(GpuReading {
             name: self.cached_name.clone(),
             usage_percent,
             temp_celsius,
+            clock_mhz,
+            is_integrated,
             vram_used_mb,
             vram_total_mb,
+            vram_type,
         })
     }
 

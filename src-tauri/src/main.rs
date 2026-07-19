@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod host;
 mod ipc;
 mod sensors;
 
@@ -26,6 +27,7 @@ fn main() {
         .manage(app_state)
         .invoke_handler(tauri::generate_handler![
             ipc::get_snapshot,
+            ipc::get_host_info,
             ipc::set_fan_speed,
         ])
         .setup(|app| {

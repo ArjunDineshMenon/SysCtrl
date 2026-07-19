@@ -97,6 +97,21 @@ impl IntelGpuSensor {
         .map(|e| e.busy as f32)
         .or_else(|| parsed.engines.first().map(|e| e.busy as f32))
     }
+
+    /// Read GPU clock (MHz) from intel_gpu_top JSON "frequency" field.
+    /// Returns None if intel_gpu_top is unavailable or parsing fails.
+    fn read_clock_via_intel_gpu_top() -> Option<u32> {
+        let output = Command::new("intel_gpu_top")
+            .args(["-J", "-s", "1000", "-o", "-"])
+            .output()
+            .ok()?;
+        if !output.status.success() {
+            return None;
+        }
+        let stdout = String::from_utf8(output.stdout).ok()?;
+        let parsed: IntelGpuTopOutput = serde_json::from_str(&stdout).ok()?;
+        parsed.frequency.map(|f| f as u32)
+    }
 }
 
 #[cfg(target_os = "linux")]
@@ -104,6 +119,9 @@ impl GpuSensor for IntelGpuSensor {
     fn read(&self) -> Result<GpuReading> {
         // Usage: via intel_gpu_top (requires root or CAP_PERFMON)
         let usage_percent = Self::read_usage_via_intel_gpu_top();
+
+        // Clock: best-effort from intel_gpu_top JSON "frequency" field.
+        let clock_mhz = Self::read_clock_via_intel_gpu_top();
 
         // Temperature: read hwmon/temp1_input (millidegrees Celsius)
         // Intel iGPU often shares CPU thermal zone or has its own hwmon.
@@ -114,12 +132,16 @@ impl GpuSensor for IntelGpuSensor {
                 .map(|v| v as f32 / 1000.0)
         });
 
+        // All Intel client GPUs in this app are integrated (iGPU / Xe iGPU).
+        let is_integrated = true;
+
         // VRAM: Intel iGPU shares system RAM — no separate VRAM concept applies.
         // Discrete Intel GPUs (Arc) may have dedicated VRAM but the i915/Xe
         // sysfs interface doesn't expose mem_info_vram_* like amdgpu does.
         // Return None for both fields.
         let vram_used_mb: Option<u32> = None;
         let vram_total_mb: Option<u32> = None;
+        let vram_type: Option<String> = None;
 
         // If the device directory itself is gone, that's a hard error (device removed/driver unloaded)
         if !self.device_path.exists() {
@@ -130,8 +152,11 @@ impl GpuSensor for IntelGpuSensor {
             name: self.cached_name.clone(),
             usage_percent,
             temp_celsius,
+            clock_mhz,
+            is_integrated,
             vram_used_mb,
             vram_total_mb,
+            vram_type,
         })
     }
 
@@ -197,6 +222,8 @@ fn get_device_name(device_path: &Path, card_name: &str) -> String {
 #[derive(Debug, Deserialize)]
 struct IntelGpuTopOutput {
     engines: Vec<IntelGpuEngine>,
+    #[serde(default)]
+    frequency: Option<f64>,
 }
 
 #[cfg(target_os = "linux")]
