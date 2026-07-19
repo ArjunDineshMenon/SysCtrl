@@ -68,7 +68,10 @@ fn collect_snapshot(backends: &sensors::DetectedBackends) -> SystemSnapshot {
         Vec::new()
     });
 
-    SystemSnapshot { cpu, gpus, fans }
+    // RAM
+    let ram = sensors::read_ram();
+
+    SystemSnapshot { cpu, gpus, fans, ram }
 }
 
 // ---------------------------------------------------------------------------

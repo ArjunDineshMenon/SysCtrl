@@ -28,6 +28,7 @@ use crate::sensors::gpu_intel::IntelGpuSensor;
 use crate::sensors::gpu_nvidia::NvidiaGpuSensor;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+use std::fs;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CpuReading {
@@ -55,10 +56,65 @@ pub struct FanReading {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RamReading {
+    pub used_mb: u32,
+    pub total_mb: u32,
+    pub percent: f32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SystemSnapshot {
     pub cpu: CpuReading,
     pub gpus: Vec<GpuReading>,
     pub fans: Vec<FanReading>,
+    pub ram: RamReading,
+}
+
+/// Read RAM usage from /proc/meminfo.
+/// Uses MemTotal and MemAvailable to compute used memory (same as `free` and `htop`).
+pub fn read_ram() -> RamReading {
+    let fallback = RamReading { used_mb: 0, total_mb: 0, percent: 0.0 };
+
+    let contents = match fs::read_to_string("/proc/meminfo") {
+        Ok(c) => c,
+        Err(_) => return fallback,
+    };
+
+    let mut total_kb: u64 = 0;
+    let mut available_kb: u64 = 0;
+
+    for line in contents.lines() {
+        if let Some(rest) = line.strip_prefix("MemTotal:") {
+            total_kb = parse_meminfo_value(rest);
+        } else if let Some(rest) = line.strip_prefix("MemAvailable:") {
+            available_kb = parse_meminfo_value(rest);
+        }
+        if total_kb > 0 && available_kb > 0 {
+            break;
+        }
+    }
+
+    if total_kb == 0 {
+        return fallback;
+    }
+
+    let used_kb = total_kb.saturating_sub(available_kb);
+    let total_mb = (total_kb / 1024) as u32;
+    let used_mb = (used_kb / 1024) as u32;
+    let percent = (used_kb as f64 / total_kb as f64 * 100.0) as f32;
+
+    RamReading { used_mb, total_mb, percent }
+}
+
+/// Parse a /proc/meminfo value line like "  12345 kB" into a u64 (kB).
+fn parse_meminfo_value(s: &str) -> u64 {
+    s.trim()
+        .strip_suffix("kB")
+        .or_else(|| s.trim().strip_suffix("KB"))
+        .unwrap_or(s.trim())
+        .trim()
+        .parse::<u64>()
+        .unwrap_or(0)
 }
 
 pub trait CpuSensor: Send + Sync {

@@ -167,24 +167,36 @@ fn find_hwmon_dir(device_path: &Path) -> Option<PathBuf> {
 /// Priority: device/product_name -> parse device/uevent for PCI_ID -> fallback "AMD GPU (cardN)"
 fn get_device_name(device_path: &Path, card_name: &str) -> String {
     // Try product_name first (available on some newer kernels)
-    if let Some(product_name) = AmdGpuSensor::read_sysfs_string(&device_path.join("product_name")) {
+    let product_name_path = device_path.join("product_name");
+    eprintln!("[DEBUG gpu_amd] get_device_name: trying {:?}", product_name_path);
+    if let Some(product_name) = AmdGpuSensor::read_sysfs_string(&product_name_path) {
+        eprintln!("[DEBUG gpu_amd] product_name = {:?}", product_name);
         if !product_name.is_empty() {
+            eprintln!("[DEBUG gpu_amd] => returning product_name: {:?}", product_name);
             return product_name;
         }
+    } else {
+        eprintln!("[DEBUG gpu_amd] product_name not found or unreadable");
     }
 
     // Parse uevent for PCI_ID (format: PCI_ID=1002:XXXX)
-    if let Some(uevent) = AmdGpuSensor::read_sysfs_string(&device_path.join("uevent")) {
+    let uevent_path = device_path.join("uevent");
+    eprintln!("[DEBUG gpu_amd] get_device_name: trying {:?}", uevent_path);
+    if let Some(uevent) = AmdGpuSensor::read_sysfs_string(&uevent_path) {
         for line in uevent.lines() {
             if let Some(pci_id) = line.strip_prefix("PCI_ID=") {
                 // pci_id format: "1002:731f" (vendor:device)
-                return format!("AMD GPU ({})", pci_id);
+                let name = format!("AMD GPU ({})", pci_id);
+                eprintln!("[DEBUG gpu_amd] => returning PCI_ID name: {:?}", name);
+                return name;
             }
         }
     }
 
     // Fallback
-    format!("AMD GPU ({})", card_name)
+    let name = format!("AMD GPU ({})", card_name);
+    eprintln!("[DEBUG gpu_amd] => returning fallback name: {:?}", name);
+    name
 }
 
 // The struct only contains PathBuf, Option<PathBuf>, and String — all Send + Sync.
